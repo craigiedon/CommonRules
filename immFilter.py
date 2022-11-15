@@ -1,102 +1,152 @@
+from dataclasses import dataclass
+from itertools import product
 from typing import Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 
+@dataclass
+class LinearModel:
+    F: np.ndarray  # State Matrix
+    G: np.ndarray  # Noise Matrix
+    proc_noise_cov: np.ndarray  # Process Noise Covariance
+    H: np.ndarray  # Measurement Projection Matrix
+    measure_noise_cov: np.ndarray  # Measurement Noise Covariance
+
+
+def c_vel_long_model(ts: float, q_p: float, q_m: float) -> LinearModel:
+    return LinearModel(
+        F=np.array([[1.0, ts, (ts ** 2.0) / 2.0],
+                    [0.0, 1.0, ts],
+                    [0.0, 0.0, 0.0]]),
+        G=np.array([(ts ** 2.0) / 2.0, ts, 1.0]),
+        proc_noise_cov=np.identity(3) * q_p,
+        H=np.array([[1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0]]),
+        measure_noise_cov=np.identity(2) * q_m
+    )
+
+
+def c_acc_long_model(ts: float, q_p: float, q_m: float) -> LinearModel:
+    return LinearModel(
+        F=np.array([[1.0, ts, (ts ** 2.0) / 2.0],
+                    [0.0, 1.0, ts],
+                    [0.0, 0.0, 1.0]]),
+        G=np.array([(ts ** 2.0) / 2.0, ts, 1.0]),
+        proc_noise_cov=np.identity(3) * q_p,
+        H=np.array([[1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0]]),
+        measure_noise_cov=np.identity(2) * q_m
+    )
+
+
 def run():
-    x_0 = np.array([0.0, 2.0, 0.0])
-    ts = 1.0
-
-    # Constant Velocity Longitudinal Model
-    F_c = np.array([[1.0, ts, (ts ** 2.0) / 2.0],
-                    [0.0, 1.0, ts],
-                    [0.0, 0.0, 0.0]])
-
-    G_c = np.array([(ts ** 2) / 2, ts, 1])
-
-    # Constant Acceleration Longitudinal Model
-    F_a = np.array([[1.0, ts, (ts ** 2.0) / 2.0],
-                    [0.0, 1.0, ts],
-                    [0.0, 0.0, 1.0]])
-
-    G_a = np.array([(ts ** 2) / 2, ts, 1])
-
-    # Process Noise Longitudinal
-    q_p = 0.1
-    proc_noise_cov = np.array([[q_p, 0.0, 0.0],
-                               [0.0, q_p, 0.0],
-                               [0.0, 0.0, q_p]])
-
-    # Measurement Model
-    H = np.array([[1.0, 0.0, 0.0],
-                  [0.0, 1.0, 0.0]])
-
-    # Measurement Noise Longitudinal
+    x_0 = np.array([0.0, 30.0, 5.0])
+    ts = 0.05
+    q_p = 0.01
     q_m = 10.0
-    measure_noise_cov = np.identity(2) * q_m
 
-    xs = [x_0]
+    # Longitudinal Models
+    cv_lm = c_vel_long_model(ts, q_p, q_m)
+    ca_lm = c_acc_long_model(ts, q_p, q_m)
+
     N = 50
+    xs = []
+    x_next = x_0
     for i in range(N - 1):
-        x_next = update_longitude(xs[-1], F_c, G_c, proc_noise_cov)
+        x_next = update_longitude(x_next, ca_lm)
         xs.append(x_next)
-        print("xn: ", x_next)
     xs = np.array(xs)
 
-    zs = []
-    for x in xs:
-        zs.append(H @ x + np.random.multivariate_normal(np.zeros(len(H)), measure_noise_cov))
-    zs = np.array(zs)
+    zs = np.array([(ca_lm.H @ x) + np.random.multivariate_normal(np.zeros(len(ca_lm.H)), ca_lm.measure_noise_cov) for x in xs])
 
-    # plt.show()
+    env_models = [(cv_lm, "Const Velocity", "green"),
+                  (ca_lm, "Const Acceleration", "orange")]
+    model_mus = []
+    for m, m_name, _ in env_models:
+        mus, covs = kalman_filter_batch(m, x_0, m.proc_noise_cov, zs)
+        model_mus.append(mus)
+        assert len(mus) == len(zs)
 
-    mu_0 = x_0
-    cov_0 = proc_noise_cov
+    # Initially uniform model prior
+    model_priors = np.array([0.5, 0.5])
 
-    mus = [mu_0]
-    covs = [cov_0]
+    # Rows = from mode, Cols = to mode
+    # uniform model transitions
+    m_trans_ps = np.array([[0.5, 0.5],
+                                        [0.5, 0.5]])
 
-    for z in zs:
-        new_mu, new_cov = kalman_filter(F_c, H, proc_noise_cov, measure_noise_cov, mus[-1], covs[-1], z)
-        mus.append(new_mu)
-        covs.append(new_cov)
+    m_probs = model_priors
+    # Evaluate mixing probabilities
+    mix_prob = np.zeros((len(env_models), len(env_models)))
+    for i, j in product(range(len(env_models)), repeat=2):
+        print(i, j)
+        mix_norm = sum([m_trans_ps[l][i] * m_probs[l] for l in range(len(env_models))])
+        mix_prob[j][i] = m_trans_ps[i][j] * m_probs[j] / mix_norm
 
-    mus = np.array(mus)
-    covs = np.array(covs)
+    print("Mix probs: ", mix_prob)
+
+    mix_ests = []
+    mix_covs = []
+
+    for m in env_models:
+        pass
 
     plt.scatter(np.arange(0, len(zs)), zs[:, 0], marker='x')
     plt.scatter(np.arange(0, len(xs)), xs[:, 0], color='black', facecolors='none', s=4.0)
-    plt.plot(np.arange(len(mus)), mus[:, 0], color='orange')
+
+    for (m, m_name, c), mus in zip(env_models, model_mus):
+        plt.plot(np.arange(len(mus)), mus[:, 0], label=m_name, color=c)
 
     # plt.scatter(np.arange(0, N), xs[:, 0])
     plt.xlabel("Timestep")
     plt.ylabel("Position")
+    plt.legend(loc='best')
     plt.show()
 
 
-def kalman_filter(A: np.ndarray,
-                  C: np.ndarray,
-                  proc_noise_v: np.ndarray,
-                  measure_noise_v: np.ndarray,
-                  prev_mu,
-                  prev_cov: np.ndarray,
-                  z: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    pred_mu = A @ prev_mu
-    pred_cov = A @ prev_cov @ A.T + proc_noise_v
+def kalman_filter_batch(env_model: LinearModel, mu_0, cov_0, zs) -> Tuple[np.ndarray, np.ndarray]:
+    mus = []
+    covs = []
 
-    inv_part = np.linalg.inv(C @ prev_cov @ C.T + measure_noise_v)
-    meas_part = pred_cov @ C.T
-    kalman_gain = meas_part @ inv_part
+    mu = mu_0
+    cov = cov_0
+    for z in zs:
+        mu, cov = kalman_filter(env_model, mu, cov, z)
+        mus.append(mu)
+        covs.append(cov)
+
+    return np.array(mus), np.array(covs)
+
+
+def kalman_filter(env_model: LinearModel,
+                  old_mu,
+                  old_cov: np.ndarray,
+                  z: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    pred_mu, pred_cov = kalman_predict(env_model.F, old_mu, old_cov, env_model.proc_noise_cov)
+    est_mu, est_cov = kalman_measure_update(pred_mu, pred_cov, env_model.H, env_model.measure_noise_cov, z)
+
+    return est_mu, est_cov
+
+
+def kalman_predict(A, old_mu, old_cov, proc_noise_v) -> Tuple[np.ndarray, np.ndarray]:
+    pred_mu = A @ old_mu
+    pred_cov = A @ old_cov @ A.T + proc_noise_v
+    return pred_mu, pred_cov
+
+
+def kalman_measure_update(pred_mu, pred_cov, C, measure_noise_v, z) -> Tuple[np.ndarray, np.ndarray]:
+    kalman_gain = pred_cov @ C.T @ np.linalg.inv(C @ pred_cov @ C.T + measure_noise_v)
     est_mu = pred_mu + kalman_gain @ (z - C @ pred_mu)
     est_cov = (np.identity(len(kalman_gain)) - kalman_gain @ C) @ pred_cov
 
     return est_mu, est_cov
 
 
-def update_longitude(x: np.ndarray, F: np.ndarray, G: np.ndarray, noise_cov: np.ndarray) -> np.ndarray:
-    noise = np.random.multivariate_normal(np.zeros(x.shape), noise_cov)
-    x_next = (F @ x) + (G @ noise)
+def update_longitude(x: np.ndarray, env_model: LinearModel) -> np.ndarray:
+    noise = np.random.multivariate_normal(np.zeros(x.shape), env_model.proc_noise_cov)
+    x_next = (env_model.F @ x) + (env_model.G @ noise)
     return x_next
 
 
