@@ -4,7 +4,7 @@ from typing import Tuple, List
 
 import numpy as np
 import matplotlib.pyplot as plt
-from filterpy.kalman import KalmanFilter
+from filterpy.kalman import KalmanFilter, IMMEstimator
 from scipy.special import logsumexp
 from scipy.stats import norm, multivariate_normal
 
@@ -78,7 +78,8 @@ def lat_model(ts: float, k_d: float, k_p: float, p_ref: float, q_p: float, q_m: 
             [-ts * k_p, 1 - ts * k_d],
         ]),
         G=np.array([(ts ** 2.0) / 2.0, ts]),
-        E=np.array([0.0, ts * k_p * p_ref]),
+        E=np.array([0.0,
+                    ts * k_p * p_ref]),
         proc_noise_cov=np.identity(2) * q_p,
         H=np.array([[1.0, 0.0]]),
         measure_noise_cov=np.identity(1) * q_m,
@@ -93,7 +94,7 @@ def kf_to_filterpy(model: AffineModel, x_0: np.ndarray) -> KalmanFilter:
     f.F = model.F
 
     # Hack for Affine shift --- Put in the control?
-    f.B = model.E
+    f.B = np.diag(model.E)
 
     f.H = model.H
     f.Q = np.diag(model.G) @ model.proc_noise_cov @ np.diag(model.G.T)
@@ -114,10 +115,10 @@ def run():
 
     # Lat Models
     lane_positions = [-3.0, 0.0, 3.0]
-    # lat_models: List[StateFeedbackModel] = [lat_model(ts, kd, 4.0, p_ref, q_p, q_m) for kd in np.linspace(3.0, 5.0, 3)
-    #                                         for p_ref in lane_positions]
-    lat_models = [lat_model(ts, 4.0, 4.0, lane_positions[0], q_p, q_m),
-                  lat_model(ts, 4.0, 4.0, lane_positions[1], q_p, q_m)]
+    lat_models: List[StateFeedbackModel] = [lat_model(ts, kd, 4.0, p_ref, q_p, q_m) for kd in np.linspace(3.0, 5.0, 3)
+                                            for p_ref in lane_positions]
+    # lat_models = [lat_model(ts, 4.0, 4.0, lane_positions[1], q_p, q_m),
+    #               lat_model(ts, 4.0, 4.0, lane_positions[0], q_p, q_m)]
 
     # for p_ref in lane_positions:
     #     for kd in np.linspace(3.0, 5.0, 3):
@@ -125,7 +126,7 @@ def run():
 
     # Lat Simulation
     # Start in right lane, then at 3 seconds, lange change into middle
-    x_lat_0 = np.array([lane_positions[0], 0.0])
+    x_lat_0 = np.array([0.0, 0.0])
     # lane_durations = [(3.0, 0), (7.0, 1)]
     lane_durations = [(10.0, 0)]
     xs_lat = []
@@ -137,7 +138,7 @@ def run():
     xs_lat = np.array(xs_lat)
     assert len(xs_lat) == N
 
-    ref_lat_model = lat_model(ts, 4.0, 4.0, lane_positions[0], 1.0, 0.0)
+    ref_lat_model = lat_model(ts, 4.0, 4.0, lane_positions[0], 1.0, 0.01)
     zs_lat = np.array(
         [(ref_lat_model.H @ x) + np.random.multivariate_normal(np.zeros(len(ref_lat_model.H)),
                                                                ref_lat_model.measure_noise_cov) for x in
@@ -149,33 +150,49 @@ def run():
                                            np.tile(x_lat_0, (len(lat_models), 1)),
                                            np.tile(np.identity(len(x_lat_0)), (len(lat_models), 1, 1)), zs_lat)
 
+    single_lat_mus = kalman_filter_batch(lat_models[4], x_lat_0, np.identity(len(x_lat_0)), zs_lat)
+
     assert len(lat_mus) == len(zs_lat)
 
     # Sanity Check with FilterPy
-    f_lat_1 = kf_to_filterpy(lat_models[1], x_lat_0)
+    fpy_models = [kf_to_filterpy(m, x_lat_0) for m in lat_models]
+    # fpy_imm = IMMEstimator(fpy_models, unif_cat_prior(len(fpy_models)), sticky_m_trans(len(fpy_models), 0.95))
+    fpy_imm = fpy_models[4]
 
-    sanity_mus_lat = []
+    sanity_mus = []
     for z in zs_lat:
-        f_lat_1.predict(np.array([1.0,1.0]), B=f_lat_1.B)
-        f_lat_1.update(z)
-        sanity_mus_lat.append(f_lat_1.x)
+        fpy_imm.predict(np.array([1.0, 1.0]))
+        fpy_imm.update(z)
+        sanity_mus.append(fpy_imm.x.copy())
+    sanity_mus = np.array(sanity_mus)
 
-    sanity_mus_lat = np.array(sanity_mus_lat)
+    # fpy_mus_lat = []
+    # for fpm in fpy_models:
+    #     sanity_mus_lat = []
+    #     for z in zs_lat:
+    #         fpm.predict(np.array([1.0, 1.0]))
+    #         fpm.update(z)
+    #         sanity_mus_lat.append(fpm.x)
+    #     fpy_mus_lat.append(sanity_mus_lat)
+    #
+    # fpy_mus_lat = np.array(fpy_mus_lat)
 
-    assert len(lat_mus) == len(sanity_mus_lat)
+    # assert len(lat_mus) == len(sanity_mus_lat)
 
     fig, axs = plt.subplots(1, 2)
     axs[0].scatter(ts * np.arange(len(xs_lat)), xs_lat[:, 0], color='black', facecolors='none', s=4.0)
     axs[0].scatter(ts * np.arange(len(zs_lat)), zs_lat, marker='x')
     axs[0].plot(ts * np.arange(len(lat_mus)), lat_mus[:, 0], color='orange')
-    axs[0].plot(ts * np.arange(len(sanity_mus_lat)), sanity_mus_lat[:, 0], color='pink')
+
+    # for fp_lat_trace in fpy_mus_lat:
+    axs[0].plot(ts * np.arange(len(sanity_mus)), sanity_mus[:, 0], color='pink')
 
     axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(0.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
     axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
     axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(-3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
     axs[0].set_xlabel("Time (s)")
     axs[0].set_ylabel("Latitude (m)")
-    axs[0].set_ylim(-5, 5)
+    # axs[0].set_ylim(-5, 5)
 
     axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 0], label='0')
     axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 1], label='1')
@@ -203,7 +220,6 @@ def run():
                                                                   simulation_model.measure_noise_cov) for x in
          xs_long])
 
-
     # Single Model Estimations
     # single_model_pred_mus = []
     # single_model_est_mus = []
@@ -227,20 +243,20 @@ def run():
                                                        np.array([0.5, 0.5]), np.tile(x_long_0, (len(long_models), 1)),
                                                        np.tile(np.identity(3), (len(long_models), 1, 1)), zs_long)
 
-    fig, ax = plt.subplots(1, 1)
-    ax.scatter(np.arange(0, len(zs_long)), zs_long[:, 0], marker='x')
-    ax.scatter(np.arange(0, len(xs_long)), xs_long[:, 0], color='black', facecolors='none', s=4.0)
+    # fig, ax = plt.subplots(1, 1)
+    # ax.scatter(np.arange(0, len(zs_long)), zs_long[:, 0], marker='x')
+    # ax.scatter(np.arange(0, len(xs_long)), xs_long[:, 0], color='black', facecolors='none', s=4.0)
 
     # ax.plot(np.arange(len(zs_long)), single_model_est_mus[0][:, 0], color='green', label='const v')
     # ax.plot(np.arange(len(zs_long)), single_model_est_mus[1][:, 0], color='pink', label='const a')
 
-    ax.plot(np.arange(len(zs_long)), fused_mus[:, 0], color='orange', label='imm')
+    # ax.plot(np.arange(len(zs_long)), fused_mus[:, 0], color='orange', label='imm')
 
     # axs[0].plot(np.arange(len(zs)), sanity_mus[:, 0], color='brown', label='sanity mus')
 
-    ax.set_xlabel("Timestep")
-    ax.set_ylabel("Position")
-    ax.legend(loc='best')
+    # ax.set_xlabel("Timestep")
+    # ax.set_ylabel("Position")
+    # ax.legend(loc='best')
 
     # axs[1].plot(np.arange(len(model_prob_time)), model_prob_time[:, 0], label='const v')
     # axs[1].plot(np.arange(len(model_prob_time)), model_prob_time[:, 1], label='const a')
@@ -252,7 +268,7 @@ def run():
     # for (m, m_name, c), mus in zip(env_models, model_mus):
     #     plt.plot(np.arange(len(mus)), mus[:, 0], label=m_name, color=c)
 
-    plt.show()
+    # plt.show()
 
 
 def unif_m_trans(m: int) -> np.ndarray:
@@ -267,7 +283,6 @@ def sticky_m_trans(m: int, stick_prob: float) -> np.ndarray:
     trans_matrix = np.full((m, m), trans_prob)
     np.fill_diagonal(trans_matrix, stick_prob)
     return trans_matrix
-
 
 
 def unif_cat_prior(m: int) -> np.ndarray:
