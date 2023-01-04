@@ -3,6 +3,7 @@ from itertools import product
 from typing import Tuple, List
 
 import numpy as np
+from numpy.random import multivariate_normal as r_mvn
 import matplotlib.pyplot as plt
 from filterpy.kalman import KalmanFilter, IMMEstimator
 from scipy.special import logsumexp
@@ -110,12 +111,13 @@ def run():
     # Longitudinal Models
     x_long_0 = np.array([0.0, 10.0, 5.0])
     q_p = 1.0
-    q_m = 1.0
-    long_models = [c_vel_long_model(ts, q_p, q_m), c_acc_long_model(ts, q_p, q_m)]
+    q_m_long = 1.0
+    long_models = [c_vel_long_model(ts, q_p, q_m_long), c_acc_long_model(ts, q_p, q_m_long)]
 
     # Lat Models
     lane_positions = [-3.0, 0.0, 3.0]
-    lat_models: List[StateFeedbackModel] = [lat_model(ts, kd, 4.0, p_ref, q_p, q_m) for kd in np.linspace(3.0, 5.0, 3)
+    q_m_lat = 0.1
+    lat_models: List[StateFeedbackModel] = [lat_model(ts, kd, 4.0, p_ref, q_p, q_m_lat) for kd in np.linspace(3.0, 5.0, 3)
                                             for p_ref in lane_positions]
     # lat_models = [lat_model(ts, 4.0, 4.0, lane_positions[1], q_p, q_m),
     #               lat_model(ts, 4.0, 4.0, lane_positions[0], q_p, q_m)]
@@ -126,23 +128,24 @@ def run():
 
     # Lat Simulation
     # Start in right lane, then at 3 seconds, lange change into middle
-    x_lat_0 = np.array([0.0, 0.0])
-    # lane_durations = [(3.0, 0), (7.0, 1)]
-    lane_durations = [(10.0, 0)]
+    x_lat_0 = np.array([-3, 0.0])
+    lane_durations = [(3.0, 0), (6.0, 1), (1.0, 2)]
+    # lane_durations = [(10.0, 0)]
     xs_lat = []
     x_lat_next = x_lat_0
     for duration, lane_idx in lane_durations:
         xs_lat.extend(
-            full_sim(x_lat_next, lat_model(ts, 4.0, 4.0, lane_positions[lane_idx], 0.0, 0.0), int(duration / ts)))
+            full_sim(x_lat_next, lat_model(ts, 4.0, 4.0, lane_positions[lane_idx], 0.1, 0.0), int(duration / ts)))
         x_lat_next = xs_lat[-1]
     xs_lat = np.array(xs_lat)
     assert len(xs_lat) == N
 
-    ref_lat_model = lat_model(ts, 4.0, 4.0, lane_positions[0], 1.0, 0.01)
-    zs_lat = np.array(
-        [(ref_lat_model.H @ x) + np.random.multivariate_normal(np.zeros(len(ref_lat_model.H)),
-                                                               ref_lat_model.measure_noise_cov) for x in
-         xs_lat])
+    ref_lat_model = lat_model(ts, 4.0, 4.0, lane_positions[0], 1.0, q_m_lat)
+
+    noises = np.array([r_mvn(np.zeros(len(ref_lat_model.H)), ref_lat_model.measure_noise_cov) for i in range(1000)])
+    print(np.mean(noises))
+    print(np.var(noises))
+    zs_lat = np.array([(ref_lat_model.H @ x) + r_mvn(np.zeros(len(ref_lat_model.H)), ref_lat_model.measure_noise_cov) for x in xs_lat])
 
     lat_mus, lat_covs, mps_lat = imm_batch(lat_models,
                                            sticky_m_trans(len(lat_models), 0.95),
@@ -150,7 +153,6 @@ def run():
                                            np.tile(x_lat_0, (len(lat_models), 1)),
                                            np.tile(np.identity(len(x_lat_0)), (len(lat_models), 1, 1)), zs_lat)
 
-    single_lat_mus = kalman_filter_batch(lat_models[4], x_lat_0, np.identity(len(x_lat_0)), zs_lat)
 
     assert len(lat_mus) == len(zs_lat)
 
@@ -179,24 +181,27 @@ def run():
 
     # assert len(lat_mus) == len(sanity_mus_lat)
 
-    fig, axs = plt.subplots(1, 2)
-    axs[0].scatter(ts * np.arange(len(xs_lat)), xs_lat[:, 0], color='black', facecolors='none', s=4.0)
-    axs[0].scatter(ts * np.arange(len(zs_lat)), zs_lat, marker='x')
-    axs[0].plot(ts * np.arange(len(lat_mus)), lat_mus[:, 0], color='orange')
+    fig, axs = plt.subplots(1, 1)
+    axs.scatter(ts * np.arange(len(xs_lat)), xs_lat[:, 0], color='black', facecolors='none', s=4.0)
+    axs.scatter(ts * np.arange(len(zs_lat)), zs_lat, marker='x')
+
+    axs.plot(ts * np.arange(len(lat_mus)), lat_mus[:, 0], color='orange')
 
     # for fp_lat_trace in fpy_mus_lat:
-    axs[0].plot(ts * np.arange(len(sanity_mus)), sanity_mus[:, 0], color='pink')
+    for single_model in lat_models:
+        single_pred_mus, single_pred_covs, single_est_mus, single_est_covs = kalman_filter_batch(single_model, x_lat_0, np.identity(len(x_lat_0)), zs_lat)
+        axs.plot(ts * np.arange(len(single_est_mus)), single_est_mus[:, 0], color='pink', alpha=0.5)
 
-    axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(0.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
-    axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
-    axs[0].plot(ts * np.arange(len(xs_lat)), np.repeat(-3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
-    axs[0].set_xlabel("Time (s)")
-    axs[0].set_ylabel("Latitude (m)")
-    # axs[0].set_ylim(-5, 5)
+    axs.plot(ts * np.arange(len(xs_lat)), np.repeat(0.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
+    axs.plot(ts * np.arange(len(xs_lat)), np.repeat(3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
+    axs.plot(ts * np.arange(len(xs_lat)), np.repeat(-3.0, len(xs_lat)), linestyle='--', color='black', alpha=0.2)
+    axs.set_xlabel("Time (s)")
+    axs.set_ylabel("Latitude (m)")
+    axs.set_ylim(-5, 5)
 
-    axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 0], label='0')
-    axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 1], label='1')
-    axs[1].legend()
+    # axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 0], label='0')
+    # axs[1].plot(ts * np.arange(len(mps_lat)), mps_lat[:, 1], label='1')
+    # axs[1].legend()
     plt.show()
 
     # Long Simulation
@@ -216,8 +221,8 @@ def run():
     xs_long = np.array(xs_long)
 
     zs_long = np.array(
-        [(simulation_model.H @ x) + np.random.multivariate_normal(np.zeros(len(simulation_model.H)),
-                                                                  simulation_model.measure_noise_cov) for x in
+        [(simulation_model.H @ x) + r_mvn(np.zeros(len(simulation_model.H)),
+                                          simulation_model.measure_noise_cov) for x in
          xs_long])
 
     # Single Model Estimations
