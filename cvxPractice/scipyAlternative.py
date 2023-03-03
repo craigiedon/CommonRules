@@ -4,6 +4,7 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize as spt
+from matplotlib import patches
 from scipy.optimize import OptimizeResult
 
 
@@ -87,7 +88,8 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     cons = (
         {"type": "eq", "fun": lambda d_vars: start_constraints(d_vars, task, start_state)},
         {"type": "eq", "fun": lambda d_vars: state_evolution(d_vars, task)},
-        {"type": "eq", "fun": lambda d_vars: lane_selection_simplex(d_vars, task)}
+        {"type": "eq", "fun": lambda d_vars: lane_selection_simplex(d_vars, task)},
+        {"type": "leq", "fun": lambda d_vars: avoid_static_obstacles(d_vars, static_obstacles)}
     )
 
     lbs = -np.ones((task.T, state_dims + action_dims + lane_dims)) * np.inf
@@ -179,8 +181,40 @@ def lane_selection_simplex(d_vars, task: TaskConfig):
     lane_sums = np.sum(lane_selectors, axis=1)
     return lane_sums - 1.0
 
+def avoid_static_obstacles(d_vars, task: TaskConfig, static_obstacles: List[PolyConstraint]):
+    reshaped_vars = d_vars.reshape(task.T, -1)
+    xs = reshaped_vars[:, 0]
+    ys = reshaped_vars[:, 1]
+    vs = reshaped_vars[:, 2]
+    hs = reshaped_vars[:, 3]
+    collision_slacks = reshaped_vars[:, mn?]
+
+    stacked_static_As = np.stack([p.A for p in static_obstacles])
+    stacked_static_bs = np.concatenate([p.B for p in static_obstacles])
+
+    ts_constraints = []
+    for x, y, h in zip(xs, ys, hs):
+        ego_r = RectObstacle(x, y, task.car_width, task.car_height, h)
+        ego_poly = to_poly_constraints(ego_r)
+        collision_A = np.stack([ego_poly.A, stacked_static_As])
+        collision_b = np.concatenate([ego_poly.b, stacked_static_bs])
+
+        single_ts_constraint = collision_A.T @ collision_slacks == 0
+        ts_constraints.append(single_ts_constraint)
+
+
+
+
+        # collision_b.T @ collision_slacks < 0
+        # So now..we need the slack variables, right?
+
+
+def obs_to_patch(obs: RectObstacle) -> patches.Rectangle:
+    return patches.Rectangle((obs.x, obs.y), obs.w, obs.h, np.rad2deg(obs.rot), facecolor='r')
+
 task_config = TaskConfig(20, 700.0, 5.0, 2.0, 1.0, 5.0, 30.0, 1.0, 1.0, np.array([-5.0, 0.0, 5.0]))
-res = car_mpc(CarState(0.0, 0.0, 0.0, 0.0), task_config, [])
+obstacle = RectObstacle(40.0, 4.5, 2.0, 1.0, 0.0)
+res = car_mpc(CarState(0.0, 0.0, 0.0, 0.0), task_config, [obstacle])
 res_vals = res.x.reshape(task_config.T, -1)
 
 print("xs:", res_vals[:, 0])
@@ -188,26 +222,29 @@ print("ys:", res_vals[:, 1])
 
 n_subplots = 4
 
-plt.subplot(n_subplots, 1, 1)
-plt.plot(range(task_config.T), res_vals[:, 0])
-plt.xlabel("t")
-plt.ylabel("X")
+fig, axs = plt.subplots(1, n_subplots)
+axs[0].plot(range(task_config.T), res_vals[:, 0])
+axs[0].set_xlabel("t")
+axs[0].set_ylabel("X")
 
-plt.subplot(n_subplots, 1, 2)
-plt.plot(range(task_config.T), res_vals[:, 1])
-plt.ylim(-5, 5)
-plt.xlabel("t")
-plt.ylabel("Y")
+axs[1].plot(range(task_config.T), res_vals[:, 1])
+axs[1].set_ylim(-5, 5)
+axs[1].set_xlabel("t")
+axs[1].set_ylabel("Y")
 
-plt.subplot(n_subplots, 1, 3)
-plt.plot(range(task_config.T), res_vals[:, 2])
-plt.xlabel("t")
-plt.ylabel("Velocity")
+axs[2].plot(range(task_config.T), res_vals[:, 2])
+axs[2].set_xlabel("t")
+axs[2].set_ylabel("Velocity")
 
-plt.subplot(n_subplots, 1, 4)
-plt.plot(range(task_config.T), res_vals[:, 3])
-plt.ylim(-np.pi, np.pi)
-plt.xlabel("t")
-plt.ylabel("$\\theta$")
+axs[3].plot(range(task_config.T), res_vals[:, 3])
+axs[3].set_ylim(-np.pi, np.pi)
+axs[3].set_xlabel("t")
+axs[3].set_ylabel("$\\theta$")
+
+fig_2, axs_2 = plt.subplots(figsize=(15, 2))
+axs_2.add_patch(obs_to_patch(obstacle))
+axs_2.scatter(res_vals[:, 0], res_vals[:, 1], marker='x')
+axs_2.set_xlabel("X")
+axs_2.set_ylabel("Y")
 
 plt.show()
