@@ -1,10 +1,10 @@
 from commonroad.scenario.scenario import Scenario
 from commonroad.visualization.mp_renderer import MPRenderer
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, animation
 from matplotlib.animation import FuncAnimation
 
 
-def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int):
+def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
     fig, ax = plt.subplots(figsize=(25, 3))
     rnd = MPRenderer(ax=ax)
     dps = rnd.draw_params
@@ -21,5 +21,6 @@ def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int):
         rnd.render()
 
     ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=200)
-    # ani.save("tutorial1.gif", animation.PillowWriter(fps=30))
+    if save_path is not None:
+        ani.save(save_path, animation.PillowWriter(fps=30))
     plt.show()
