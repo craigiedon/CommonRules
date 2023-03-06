@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt, animation
 from matplotlib.animation import FuncAnimation
 
 
-def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
+def animate_scenario_old(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
     fig, ax = plt.subplots(figsize=(25, 3))
     rnd = MPRenderer(ax=ax)
     dps = rnd.draw_params
@@ -19,6 +19,39 @@ def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, s
         #         'facecolor': 'g'}}}}}})
         planning_problem_set.draw(rnd)
         rnd.render()
+
+    ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=200)
+    if save_path is not None:
+        ani.save(save_path, animation.PillowWriter(fps=30))
+    plt.show()
+
+def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
+    fig, ax = plt.subplots(figsize=(25, 3))
+
+    rnd = MPRenderer(ax=ax)
+    dps = rnd.draw_params
+    is_s = rnd.draw_params["planning_problem"]["initial_state"]["state"]
+    rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
+    # rnd.draw_params.dynamic_obstacle.trajectory.zorder = 10000
+
+
+    # rnd.draw_params.dynamic_obstacle.trajectory.draw_trajectory = True
+    # rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = False
+    # rnd.draw_params.dynamic_obstacle.trajectory.line_width = 100.0 <- This is key to seeing bug - there is just something broken about the ellipse offsets
+    # rnd.draw_params.dynamic_obstacle.trajectory.shape.draw_mesh = True
+    # rnd.draw_params.dynamic_obstacle.trajectory.facecolor = 'b'
+    # rnd.draw_params.dynamic_obstacle.trajectory.shape.zorder = 10000
+    # rnd.draw_params.dynamic_obstacle.trajectory.shape.zorder = 10000
+    print(dps)
+
+
+    def animate(i):
+        rnd.draw_params.time_begin = i
+        rnd.draw_params.time_end = i + 10
+        scenario.draw(rnd)
+        planning_problem_set.draw(rnd)
+        rnd.render()
+
 
     ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=200)
     if save_path is not None:

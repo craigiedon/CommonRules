@@ -4,6 +4,7 @@ from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistin
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
+from commonroad.scenario.state import InitialState, KSState
 from commonroad.scenario.trajectory import State, Trajectory
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, CarState, IntervalConstraint
@@ -47,9 +48,9 @@ def run():
 
     dyn_v = 31.29
     dyn_obs_shape = Rectangle(width=1.674, length=4.298)
-    dyn_obs_init = State(position=[start_state.x, start_state.y], velocity=start_state.v, orientation=start_state.heading, time_step=0)
+    dyn_obs_init = InitialState(position=[start_state.x, start_state.y], velocity=start_state.v, orientation=start_state.heading, time_step=0)
 
-    dn_state_list = [State(position=[x, y], velocity=v, orientation=h, time_step=i) for i, (x, y, v, h) in enumerate(zip(res.xs, res.ys, res.vs, res.hs))][1:]
+    dn_state_list = [KSState(position=[x,y], velocity=v, orientation=h, time_step=i) for i, (x, y, v, h) in enumerate(zip(res.xs, res.ys, res.vs, res.hs))][1:]
     # for i in range(1, timesteps + 1):
     #     new_pos = np.array([dyn_obs_init.position[0] + scenario.dt * i * dyn_v, dyn_obs_init.position[1]])
     #     dn_state_list.append(State(position=new_pos, velocity=dyn_v, orientation=0.02, time_step=i))
@@ -63,7 +64,7 @@ def run():
                               dyn_obs_pred)
 
     scenario.add_objects(dyn_obs)
-    animate_scenario(scenario, planning_problem_set, int(task_config.time / task_config.dt), save_path="cutInAnim.gif")
+    animate_scenario(scenario, planning_problem_set, int(task_config.time / task_config.dt)) #save_path="cutInAnim.gif")
     # print(res)
 
     scenario_save_path = "scenarios/CutIn.xml"
