@@ -1,5 +1,6 @@
 import numpy as np
 from commonroad.common.file_reader import CommonRoadFileReader
+from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistingFile
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
@@ -64,6 +65,10 @@ def run():
     scenario.add_objects(dyn_obs)
     animate_scenario(scenario, planning_problem_set, int(task_config.time / task_config.dt), save_path="cutInAnim.gif")
     # print(res)
+
+    scenario_save_path = "scenarios/CutIn.xml"
+    fw = CommonRoadFileWriter(scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
+    fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
 if __name__ == "__main__":
     run()
