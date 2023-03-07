@@ -47,7 +47,7 @@ def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, s
 
     def animate(i):
         rnd.draw_params.time_begin = i
-        rnd.draw_params.time_end = i + 10
+        rnd.draw_params.time_end = i + 15
         scenario.draw(rnd)
         planning_problem_set.draw(rnd)
         rnd.render()

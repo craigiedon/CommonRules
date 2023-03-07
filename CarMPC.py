@@ -28,6 +28,11 @@ class TaskConfig:
     lane_targets: List[IntervalConstraint]
 
 @dataclass
+class CostWeights:
+    x_prog: float # etc
+
+
+@dataclass
 class CarState:
     x: float
     y: float
@@ -79,7 +84,7 @@ def to_poly_constraints(r: RectObstacle) -> PolyConstraint:
     b = casadi.vcat([r.h, r.h, r.w, r.w]) / 2.0 + A @ casadi.vcat([r.x, r.y])
     return PolyConstraint(A = A, b=b)
 
-def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[RectObstacle], prev_solve=None) -> CarMPCRes:
+def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[RectObstacle], cost_weights: CostWeights, prev_solve=None) -> CarMPCRes:
     opti = casadi.Opti()
     T = int(task.time/task.dt) # time steps
 
@@ -98,8 +103,8 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     collision_slacks = opti.variable(T, 8 * len(static_obstacles))
 
     # Distance to destination cost
-    x_progress_cost = casadi.sumsqr((xs - task.x_goal) / (start_state.x - task.x_goal))
-    y_progress_cost = casadi.sumsqr((ys - task.y_goal) / (start_state.y - task.y_goal))
+    x_progress_cost = casadi.sumsqr((xs - task.x_goal)) # / (start_state.x - task.x_goal))
+    y_progress_cost = casadi.sumsqr((ys - task.y_goal)) # / (start_state.y - task.y_goal))
 
     # Track the reference velocity
     vel_track_cost = casadi.sumsqr(vs - task.v_goal * task.dt)
@@ -123,17 +128,23 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
         assert e_ts > s_ts
         opti.subject_to(lane_selectors[s_ts:e_ts, lt.value] == 1.0)
 
-    chosen_lanes = lane_selectors @ lane_params
-    lane_align_cost = casadi.sumsqr(ys - chosen_lanes)
+    lane_diffs = ((ys - casadi.repmat(lane_params, 1, T).T) ** 2)
+    chosen_lanes = lane_selectors * lane_diffs
+    lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
+    # lane_align_cost = casadi.sumsqr(chosen_lanes)
 
-    opti.minimize(x_progress_cost +
-                  y_progress_cost +
-                  vel_track_cost +
-                  acc_cost +
+    # l_ents = lane_selectors * casadi.log(lane_selectors + 1e-8)
+
+    opti.minimize(0.0001 * x_progress_cost +
+                  0 * y_progress_cost +
+                  10 * vel_track_cost +
+                  2000 * acc_cost +
                   ang_vel_cost +
                   jerk_cost +
-                  road_align_cost +
-                  lane_align_cost)
+                  1 * road_align_cost +
+                  5 * lane_align_cost
+                  )
+
 
     # Start State Constraints
     opti.subject_to(xs[0] == start_state.x)
@@ -146,7 +157,7 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     opti.subject_to(opti.bounded(-casadi.pi / 2.0, casadi.vec(hs), casadi.pi / 2.0))
     opti.subject_to(opti.bounded(-task.acc_max * task.dt, casadi.vec(accs), task.acc_max * task.dt))
     opti.subject_to(opti.bounded(-task.ang_vel_max * task.dt, casadi.vec(ang_vels), task.ang_vel_max * task.dt))
-    opti.subject_to(opti.bounded(0.0, casadi.vec(lane_selectors), 1.0))
+    opti.subject_to(opti.bounded(0, casadi.vec(lane_selectors), 1))
 
     # State Evolution
     opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1])
@@ -155,7 +166,7 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     opti.subject_to(hs[1:] == hs[:-1] + ang_vels[:-1])
 
     # Lane Selection Simplex
-    opti.subject_to(casadi.sum2(lane_selectors) == 1.0)
+    opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
     # Avoid Obstacles
     # TODO: Add *dynamic* obstacles (i.e., find the traj pred class in commonroad)
@@ -183,6 +194,9 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
         opti.set_initial(prev_solve.value_variables())
 
     sol = opti.solve()
+
+    sel_slacks = sol.value(lane_selectors)
+    sel_lane_diffs = sol.value(lane_diffs)
 
     return CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
 
