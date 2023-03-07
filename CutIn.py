@@ -24,7 +24,7 @@ def run():
     # Ford Escort Config. See Commonroad Vehicle Model Documentation
     lane_centres = [scenario.lanelet_network.find_lanelet_by_id(l).center_vertices[0][1] for l in [3, 6, 10]]
     goal_state = planning_problem_set.find_planning_problem_by_id(1).goal.state_list[0].position.center
-    task_config = TaskConfig(time=8,
+    task_config = TaskConfig(time=5,
                              dt=0.1,
                              x_goal=goal_state[0],
                              y_goal=goal_state[1],
@@ -64,7 +64,7 @@ def run():
                               dyn_obs_pred)
 
     scenario.add_objects(dyn_obs)
-    animate_scenario(scenario, planning_problem_set, int(task_config.time / task_config.dt)) #save_path="cutInAnim.gif")
+    # animate_scenario(scenario, planning_problem_set, int(task_config.time / task_config.dt)) #save_path="cutInAnim.gif")
     # print(res)
 
     scenario_save_path = "scenarios/CutIn.xml"

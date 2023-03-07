@@ -79,7 +79,7 @@ def to_poly_constraints(r: RectObstacle) -> PolyConstraint:
     b = casadi.vcat([r.h, r.h, r.w, r.w]) / 2.0 + A @ casadi.vcat([r.x, r.y])
     return PolyConstraint(A = A, b=b)
 
-def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[RectObstacle]) -> CarMPCRes:
+def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[RectObstacle], prev_solve=None) -> CarMPCRes:
     opti = casadi.Opti()
     T = int(task.time/task.dt) # time steps
 
@@ -176,8 +176,11 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
                 opti.subject_to(full_b.T @ c_slack.T < 0)
 
 
+    # opti.solver('ipopt', {"ipopt.print_level": 3})
     opti.solver('ipopt')
-    # opti.set_initial(sol1.value_variables())
+
+    if prev_solve is not None:
+        opti.set_initial(prev_solve.value_variables())
 
     sol = opti.solve()
 
