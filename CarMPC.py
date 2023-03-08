@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
 import casadi
+from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle
+from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
 
@@ -14,10 +16,11 @@ class IntervalConstraint:
 
 @dataclass
 class TaskConfig:
-    time: float # Seconds
+    # time: float # Seconds
     dt: float # steps/second
     x_goal: float # Metres
     y_goal: float # Metres
+    y_bounds: Tuple[float, float]
     car_width: float # Metres
     car_height: float # Metres
     v_goal: float # Metres/Sec
@@ -26,18 +29,27 @@ class TaskConfig:
     ang_vel_max: float # Metres/Sec
     lanes: List[float] # Metres
     lane_targets: List[IntervalConstraint]
+    collision_field_slope: float
 
 @dataclass
 class CostWeights:
-    x_prog: float # etc
+    x_prog: float = 1
+    y_prog: float = 1
+    v_track: float = 1
+    acc: float = 1
+    ang_v: float = 1
+    jerk: float = 1
+    road_align: float = 1
+    lane_align: float = 1
+    collision_pot: float = 1
 
 
-@dataclass
-class CarState:
-    x: float
-    y: float
-    v: float
-    heading: float
+# @dataclass
+# class CarState:
+#     x: float
+#     y: float
+#     v: float
+#     heading: float
 
 @dataclass
 class CarMPCRes:
@@ -73,20 +85,34 @@ def obs_to_patch(obs: RectObstacle, color='r', alpha=1.0) -> patches.Rectangle:
     r = RectCustom((obs.x - obs.w / 2.0, obs.y - obs.h / 2.0), obs.w, obs.h, np.rad2deg(obs.rot), facecolor=color, alpha=alpha)
     return r
 
-def to_poly_constraints(r: RectObstacle) -> PolyConstraint:
+def to_poly_constraints(x: float, y: float, w: float, h: float, rot: float) -> PolyConstraint:
     A = casadi.blockcat([
-        [casadi.sin(r.rot), -casadi.cos(r.rot)],
-        [-casadi.sin(r.rot), casadi.cos(r.rot)],
-        [casadi.cos(r.rot), casadi.sin(r.rot)],
-        [-casadi.cos(r.rot), -casadi.sin(r.rot)],
+        [casadi.sin(rot), -casadi.cos(rot)],
+        [-casadi.sin(rot), casadi.cos(rot)],
+        [casadi.cos(rot), casadi.sin(rot)],
+        [-casadi.cos(rot), -casadi.sin(rot)],
     ])
 
-    b = casadi.vcat([r.h, r.h, r.w, r.w]) / 2.0 + A @ casadi.vcat([r.x, r.y])
+    b = casadi.vcat([h, h, w, w]) / 2.0 + A @ casadi.vcat([x, y])
     return PolyConstraint(A = A, b=b)
 
-def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[RectObstacle], cost_weights: CostWeights, prev_solve=None) -> CarMPCRes:
+def to_numpy_polys(x:float, y:float, w: float, h: float, rot: float) -> PolyConstraint:
+    A = np.array([
+        [np.sin(rot), -np.cos(rot)],
+        [-np.sin(rot), np.cos(rot)],
+        [np.cos(rot), np.sin(rot)],
+        [-np.cos(rot), -np.sin(rot)],
+    ])
+
+    b = np.array([h, h, w, w]) / 2.0 + A @ np.array([x, y])
+    return PolyConstraint(A = A, b=b)
+
+
+def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig, static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle], cw: Optional[CostWeights] = None, prev_solve:CarMPCRes = None) -> CarMPCRes:
     opti = casadi.Opti()
-    T = int(task.time/task.dt) # time steps
+    start_step = int(np.round(start_time / task.dt))
+    end_step = int(np.round(end_time / task.dt))
+    T = end_step - start_step
 
     xs = opti.variable(T)
     ys = opti.variable(T)
@@ -100,7 +126,7 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     opti.set_value(lane_params, task.lanes)
 
     # 4 bs per rectangle (ego + 1st static obstacle 8 == 4 * 2)
-    collision_slacks = opti.variable(T, 8 * len(static_obstacles))
+    # collision_slacks = opti.variable(T, 8 * len(static_obstacles) + 8 * len(dynamic_obstacles))
 
     # Distance to destination cost
     x_progress_cost = casadi.sumsqr((xs - task.x_goal)) # / (start_state.x - task.x_goal))
@@ -131,26 +157,61 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     lane_diffs = ((ys - casadi.repmat(lane_params, 1, T).T) ** 2)
     chosen_lanes = lane_selectors * lane_diffs
     lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
-    # lane_align_cost = casadi.sumsqr(chosen_lanes)
 
-    # l_ents = lane_selectors * casadi.log(lane_selectors + 1e-8)
+    if cw is None:
+        cw = CostWeights()
 
-    opti.minimize(0.0001 * x_progress_cost +
-                  0 * y_progress_cost +
-                  10 * vel_track_cost +
-                  2000 * acc_cost +
-                  ang_vel_cost +
-                  jerk_cost +
-                  1 * road_align_cost +
-                  5 * lane_align_cost
+    if len(static_obstacles) > 0:
+        s_pots = []
+        for s_obs in static_obstacles:
+            s_x, s_y = s_obs.initial_state.position
+            s_dist_x = ((xs - s_x) / s_obs.obstacle_shape.length) ** 2
+            s_dist_y = ((ys - s_y) / s_obs.obstacle_shape.width) ** 2
+            s_pots.append(casadi.exp(-task.collision_field_slope*(s_dist_x + s_dist_y)))
+        s_pots = casadi.vcat(s_pots)
+        s_obs_cost = casadi.sum2(casadi.sum1(s_pots))
+    else:
+        s_obs_cost = 0.0
+
+    if len(dynamic_obstacles) > 0:
+        d_pots = []
+        for d_obs in dynamic_obstacles:
+            if start_step == 0:
+                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1, end_step-1)
+            else:
+                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step-1)
+
+            d_xs = np.array([ds.position[0] for ds in d_states])
+            d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2
+
+            d_ys = np.array([ds.position[1] for ds in d_states])
+            d_dist_y = ((ys - d_ys) / d_obs.obstacle_shape.width) ** 2
+            d_pots.append(casadi.exp(-task.collision_field_slope*(d_dist_x + d_dist_y)))
+        d_pots = casadi.vcat(d_pots)
+        d_obs_cost = casadi.sum2(casadi.sum1(d_pots))
+    else:
+        d_obs_cost = 0.0
+
+
+    opti.minimize(cw.x_prog * x_progress_cost +
+                  cw.y_prog * y_progress_cost +
+                  cw.v_track * vel_track_cost +
+                  cw.acc * acc_cost +
+                  cw.ang_v * ang_vel_cost +
+                  cw.jerk * jerk_cost +
+                  cw.road_align * road_align_cost +
+                  cw.lane_align * lane_align_cost +
+                  cw.collision_pot * s_obs_cost +
+                  cw.collision_pot * d_obs_cost
                   )
 
 
     # Start State Constraints
-    opti.subject_to(xs[0] == start_state.x)
-    opti.subject_to(ys[0] == start_state.y)
-    opti.subject_to(vs[0] == start_state.v)
-    opti.subject_to(hs[0] == start_state.heading)
+    opti.subject_to(xs[0] == start_state.position[0])
+    opti.subject_to(ys[0] == start_state.position[1])
+
+    opti.subject_to(vs[0] == start_state.velocity)
+    opti.subject_to(hs[0] == start_state.orientation)
 
     # Variable Bounds
     opti.subject_to(opti.bounded(-task.v_max * task.dt, casadi.vec(vs), task.v_max * task.dt))
@@ -158,6 +219,9 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     opti.subject_to(opti.bounded(-task.acc_max * task.dt, casadi.vec(accs), task.acc_max * task.dt))
     opti.subject_to(opti.bounded(-task.ang_vel_max * task.dt, casadi.vec(ang_vels), task.ang_vel_max * task.dt))
     opti.subject_to(opti.bounded(0, casadi.vec(lane_selectors), 1))
+
+    # Lane Bounds
+    opti.subject_to(opti.bounded(task.y_bounds[0] + task.car_height / 2.0, casadi.vec(ys), task.y_bounds[1] - task.car_height / 2.0))
 
     # State Evolution
     opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1])
@@ -169,36 +233,58 @@ def car_mpc(start_state: CarState, task: TaskConfig, static_obstacles: List[Rect
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
     # Avoid Obstacles
-    # TODO: Add *dynamic* obstacles (i.e., find the traj pred class in commonroad)
-    if len(static_obstacles) > 0:
-        opti.subject_to(casadi.vec(collision_slacks) >= 0.0)
-        for t in range(T):
-            # Split up the slack variables by timestep, and by obstacle
-            c_slacks_t = casadi.horzsplit(collision_slacks[t, :], np.arange(0, len(static_obstacles) * 8 + 1, 8))
-            for s_obs, c_slack in zip(static_obstacles, c_slacks_t):
-                ego_poly = to_poly_constraints(RectObstacle(xs[t], ys[t], task.car_width, task.car_height, hs[t]))
-                obs_poly = to_poly_constraints(s_obs)
-
-                full_A = casadi.vcat([ego_poly.A, obs_poly.A])
-                full_b = casadi.vcat([ego_poly.b, obs_poly.b])
-
-                # Use the slack variables to create a constraint
-                opti.subject_to(full_A.T @ c_slack.T == 0)
-                opti.subject_to(full_b.T @ c_slack.T < 0)
+    # if len(static_obstacles) + len(dynamic_obstacles) > 0:
+    #     opti.subject_to(casadi.vec(collision_slacks) > 0)
 
 
-    # opti.solver('ipopt', {"ipopt.print_level": 3})
-    opti.solver('ipopt')
+
+    # if len(static_obstacles) > 0:
+    #     for t in range(T):
+    #         # Split up the slack variables by timestep, and by obstacle
+    #         c_slacks_t = casadi.horzsplit(collision_slacks[t, :], np.arange(0, len(static_obstacles) * 8 + 1, 8))
+    #         for s_obs, c_slack in zip(static_obstacles, c_slacks_t):
+    #             ego_poly = to_poly_constraints(xs[t], ys[t], task.car_width, task.car_height, hs[t])
+    #
+    #             wiggle_room = 0.1
+    #             obs_poly = to_numpy_polys(s_obs.initial_state.position[0], s_obs.initial_state.position[1],
+    #                                            s_obs.obstacle_shape.length + wiggle_room, s_obs.obstacle_shape.width + wiggle_room,
+    #                                            s_obs.initial_state.orientation)
+    #
+    #             full_A = casadi.vcat([ego_poly.A, obs_poly.A])
+    #             full_b = casadi.vcat([ego_poly.b, obs_poly.b])
+    #
+    #             # Use the slack variables to create a constraint
+    #
+    #             opti.subject_to(full_A.T @ c_slack.T == 0)
+    #             opti.subject_to(full_b.T @ c_slack.T < -1e-4)
+
+    if len(dynamic_obstacles) > 0:
+        pass
+
+
+    opti.solver('ipopt', {"ipopt.print_level": 0})
+    # opti.solver('ipopt', {"ipopt.max_iter": 10000})
 
     if prev_solve is not None:
-        opti.set_initial(prev_solve.value_variables())
+        opti.set_initial(xs, prev_solve.xs)
+        opti.set_initial(ys, prev_solve.ys)
+        opti.set_initial(vs, prev_solve.vs)
+        opti.set_initial(hs, prev_solve.hs)
+        opti.set_initial(accs, prev_solve.accs)
+        opti.set_initial(ang_vels, prev_solve.ang_vels)
 
     sol = opti.solve()
 
-    sel_slacks = sol.value(lane_selectors)
-    sel_lane_diffs = sol.value(lane_diffs)
+    sol_selectors = sol.value(lane_selectors)
+    sol_lane_diffs = sol.value(lane_diffs)
+    # sol_slacks = sol.value(collision_slacks)
 
-    return CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
+    # sol_eqs = np.stack([sol.value(c) for c in col_eqs])
+    # sol_les = np.stack([sol.value(c) for c in col_les])
+
+    res = CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
+
+    return res
 
 def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectObstacle]):
     n_subplots = 4

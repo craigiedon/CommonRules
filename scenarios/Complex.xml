@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<commonRoad timeStepSize="0.1" commonRoadVersion="2020a" author="Craig Innes" affiliation="University of Edinburgh" source="hand-crafted" benchmarkID="ZAM_Ramp-1_1_T-1" date="2023-03-07">
+<commonRoad timeStepSize="0.1" commonRoadVersion="2020a" author="Craig Innes" affiliation="University of Edinburgh" source="hand-crafted" benchmarkID="ZAM_Ramp-1_1_T-1" date="2023-03-08">
   <location>
     <geoNameId>-999</geoNameId>
     <gpsLatitude>999.0</gpsLatitude>
@@ -7,9 +7,9 @@
   </location>
   <scenarioTags>
     <parallel_lanes/>
+    <multi_lane/>
     <no_oncoming_traffic/>
     <interstate/>
-    <multi_lane/>
   </scenarioTags>
   <lanelet id="2">
     <leftBound>
@@ -5838,10 +5838,10 @@
           </point>
         </position>
         <velocity>
-          <exact>1.15</exact>
+          <exact>0.4987</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.11</exact>
         </orientation>
       </state>
       <state>
@@ -5850,15 +5850,15 @@
         </time>
         <position>
           <point>
-            <x>46.15</x>
-            <y>1.7499</y>
+            <x>45.4957</x>
+            <y>1.8047</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0367</exact>
+          <exact>0.9082</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.22</exact>
         </orientation>
       </state>
       <state>
@@ -5867,15 +5867,15 @@
         </time>
         <position>
           <point>
-            <x>48.1867</x>
-            <y>1.7499</y>
+            <x>46.3821</x>
+            <y>2.0029</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1094</exact>
+          <exact>1.24</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.33</exact>
         </orientation>
       </state>
       <state>
@@ -5884,15 +5884,15 @@
         </time>
         <position>
           <point>
-            <x>50.2961</x>
-            <y>1.7499</y>
+            <x>47.5552</x>
+            <y>2.4047</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1138</exact>
+          <exact>1.5034</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.44</exact>
         </orientation>
       </state>
       <state>
@@ -5901,15 +5901,15 @@
         </time>
         <position>
           <point>
-            <x>52.4099</x>
-            <y>1.7499</y>
+            <x>48.9154</x>
+            <y>3.0451</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1125</exact>
+          <exact>1.7038</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.4894</exact>
         </orientation>
       </state>
       <state>
@@ -5918,15 +5918,15 @@
         </time>
         <position>
           <point>
-            <x>54.5224</x>
-            <y>1.7499</y>
+            <x>50.4192</x>
+            <y>3.8462</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1107</exact>
+          <exact>1.8597</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.3794</exact>
         </orientation>
       </state>
       <state>
@@ -5935,15 +5935,15 @@
         </time>
         <position>
           <point>
-            <x>56.6332</x>
-            <y>1.7499</y>
+            <x>52.1467</x>
+            <y>4.535</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1089</exact>
+          <exact>1.9856</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.2694</exact>
         </orientation>
       </state>
       <state>
@@ -5952,15 +5952,15 @@
         </time>
         <position>
           <point>
-            <x>58.7422</x>
-            <y>1.7499</y>
+            <x>54.0607</x>
+            <y>5.0636</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1072</exact>
+          <exact>2.0893</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>0.1594</exact>
         </orientation>
       </state>
       <state>
@@ -5969,15 +5969,15 @@
         </time>
         <position>
           <point>
-            <x>60.8494</x>
-            <y>1.7497</y>
+            <x>56.1235</x>
+            <y>5.3953</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1054</exact>
+          <exact>2.1749</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>0.0494</exact>
         </orientation>
       </state>
       <state>
@@ -5986,15 +5986,15 @@
         </time>
         <position>
           <point>
-            <x>62.9549</x>
-            <y>1.7494</y>
+            <x>58.2959</x>
+            <y>5.5029</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1037</exact>
+          <exact>2.2451</exact>
         </velocity>
         <orientation>
-          <exact>-0.0006</exact>
+          <exact>-0.0605</exact>
         </orientation>
       </state>
       <state>
@@ -6003,15 +6003,15 @@
         </time>
         <position>
           <point>
-            <x>65.0586</x>
-            <y>1.7479</y>
+            <x>60.5369</x>
+            <y>5.367</y>
           </point>
         </position>
         <velocity>
-          <exact>2.102</exact>
+          <exact>2.3023</exact>
         </velocity>
         <orientation>
-          <exact>-0.0047</exact>
+          <exact>-0.0459</exact>
         </orientation>
       </state>
       <state>
@@ -6020,15 +6020,15 @@
         </time>
         <position>
           <point>
-            <x>67.1607</x>
-            <y>1.738</y>
+            <x>62.8369</x>
+            <y>5.2613</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1006</exact>
+          <exact>2.3491</exact>
         </velocity>
         <orientation>
-          <exact>-0.0211</exact>
+          <exact>-0.0053</exact>
         </orientation>
       </state>
       <state>
@@ -6037,15 +6037,15 @@
         </time>
         <position>
           <point>
-            <x>69.2609</x>
-            <y>1.6937</y>
+            <x>65.186</x>
+            <y>5.2488</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1001</exact>
+          <exact>2.3872</exact>
         </velocity>
         <orientation>
-          <exact>-0.0485</exact>
+          <exact>0.0002</exact>
         </orientation>
       </state>
       <state>
@@ -6054,15 +6054,15 @@
         </time>
         <position>
           <point>
-            <x>71.3586</x>
-            <y>1.5918</y>
+            <x>67.5732</x>
+            <y>5.2495</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0978</exact>
+          <exact>2.4183</exact>
         </velocity>
         <orientation>
-          <exact>-0.0125</exact>
+          <exact>0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -6071,15 +6071,15 @@
         </time>
         <position>
           <point>
-            <x>73.4563</x>
-            <y>1.5655</y>
+            <x>69.9916</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0892</exact>
+          <exact>2.4436</exact>
         </velocity>
         <orientation>
-          <exact>0.0274</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6088,15 +6088,15 @@
         </time>
         <position>
           <point>
-            <x>75.5448</x>
-            <y>1.6228</y>
+            <x>72.4353</x>
+            <y>5.25</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0758</exact>
+          <exact>2.4642</exact>
         </velocity>
         <orientation>
-          <exact>0.0674</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6105,15 +6105,15 @@
         </time>
         <position>
           <point>
-            <x>77.6159</x>
-            <y>1.7627</y>
+            <x>74.8996</x>
+            <y>5.25</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0653</exact>
+          <exact>2.481</exact>
         </velocity>
         <orientation>
-          <exact>0.1074</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6122,15 +6122,15 @@
         </time>
         <position>
           <point>
-            <x>79.6694</x>
-            <y>1.9842</y>
+            <x>77.3806</x>
+            <y>5.25</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0723</exact>
+          <exact>2.4945</exact>
         </velocity>
         <orientation>
-          <exact>0.1474</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6139,15 +6139,15 @@
         </time>
         <position>
           <point>
-            <x>81.7193</x>
-            <y>2.2887</y>
+            <x>79.8752</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1173</exact>
+          <exact>2.5055</exact>
         </velocity>
         <orientation>
-          <exact>0.1874</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6156,15 +6156,15 @@
         </time>
         <position>
           <point>
-            <x>83.7996</x>
-            <y>2.6833</y>
+            <x>82.3808</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.2253</exact>
+          <exact>2.5144</exact>
         </velocity>
         <orientation>
-          <exact>0.2274</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6173,15 +6173,15 @@
         </time>
         <position>
           <point>
-            <x>85.9676</x>
-            <y>3.1851</y>
+            <x>84.8952</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.3954</exact>
+          <exact>2.5216</exact>
         </velocity>
         <orientation>
-          <exact>0.2674</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6190,15 +6190,15 @@
         </time>
         <position>
           <point>
-            <x>88.2779</x>
-            <y>3.8181</y>
+            <x>87.4168</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.2228</exact>
+          <exact>2.5273</exact>
         </velocity>
         <orientation>
-          <exact>0.2274</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6207,15 +6207,15 @@
         </time>
         <position>
           <point>
-            <x>90.4435</x>
-            <y>4.3193</y>
+            <x>89.9442</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1121</exact>
+          <exact>2.5318</exact>
         </velocity>
         <orientation>
-          <exact>0.1874</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6224,15 +6224,15 @@
         </time>
         <position>
           <point>
-            <x>92.5186</x>
-            <y>4.7129</y>
+            <x>92.4761</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0641</exact>
+          <exact>2.5355</exact>
         </velocity>
         <orientation>
-          <exact>0.1474</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6241,15 +6241,15 @@
         </time>
         <position>
           <point>
-            <x>94.5604</x>
-            <y>5.0162</y>
+            <x>95.0116</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.054</exact>
+          <exact>2.5383</exact>
         </velocity>
         <orientation>
-          <exact>0.1074</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6258,15 +6258,15 @@
         </time>
         <position>
           <point>
-            <x>96.6026</x>
-            <y>5.2364</y>
+            <x>97.5499</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0613</exact>
+          <exact>2.5405</exact>
         </velocity>
         <orientation>
-          <exact>0.0674</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6275,15 +6275,15 @@
         </time>
         <position>
           <point>
-            <x>98.6592</x>
-            <y>5.3754</y>
+            <x>100.0905</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0716</exact>
+          <exact>2.5422</exact>
         </velocity>
         <orientation>
-          <exact>0.0274</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6292,15 +6292,15 @@
         </time>
         <position>
           <point>
-            <x>100.7301</x>
-            <y>5.4322</y>
+            <x>102.6328</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0771</exact>
+          <exact>2.5435</exact>
         </velocity>
         <orientation>
-          <exact>-0.0125</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6309,15 +6309,15 @@
         </time>
         <position>
           <point>
-            <x>102.8071</x>
-            <y>5.4061</y>
+            <x>105.1764</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0765</exact>
+          <exact>2.5445</exact>
         </velocity>
         <orientation>
-          <exact>-0.0485</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6326,15 +6326,15 @@
         </time>
         <position>
           <point>
-            <x>104.8812</x>
-            <y>5.3054</y>
+            <x>107.721</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.074</exact>
+          <exact>2.5452</exact>
         </velocity>
         <orientation>
-          <exact>-0.0212</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6343,15 +6343,15 @@
         </time>
         <position>
           <point>
-            <x>106.9547</x>
-            <y>5.2614</y>
+            <x>110.2662</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0725</exact>
+          <exact>2.5456</exact>
         </velocity>
         <orientation>
-          <exact>-0.0046</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6360,15 +6360,15 @@
         </time>
         <position>
           <point>
-            <x>109.0272</x>
-            <y>5.2517</y>
+            <x>112.8118</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0712</exact>
+          <exact>2.5459</exact>
         </velocity>
         <orientation>
-          <exact>-0.0006</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6377,15 +6377,15 @@
         </time>
         <position>
           <point>
-            <x>111.0984</x>
-            <y>5.2505</y>
+            <x>115.3578</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0699</exact>
+          <exact>2.546</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6394,15 +6394,15 @@
         </time>
         <position>
           <point>
-            <x>113.1684</x>
-            <y>5.2502</y>
+            <x>117.9038</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0687</exact>
+          <exact>2.546</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6411,12 +6411,12 @@
         </time>
         <position>
           <point>
-            <x>115.2371</x>
-            <y>5.25</y>
+            <x>120.4498</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0675</exact>
+          <exact>2.5459</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6428,12 +6428,12 @@
         </time>
         <position>
           <point>
-            <x>117.3047</x>
-            <y>5.25</y>
+            <x>122.9958</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0663</exact>
+          <exact>2.5457</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6445,12 +6445,12 @@
         </time>
         <position>
           <point>
-            <x>119.3711</x>
-            <y>5.25</y>
+            <x>125.5416</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0652</exact>
+          <exact>2.5455</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6462,15 +6462,15 @@
         </time>
         <position>
           <point>
-            <x>121.4363</x>
-            <y>5.25</y>
+            <x>128.0872</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.064</exact>
+          <exact>2.5452</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6479,15 +6479,15 @@
         </time>
         <position>
           <point>
-            <x>123.5004</x>
-            <y>5.25</y>
+            <x>130.6325</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0629</exact>
+          <exact>2.5449</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6496,12 +6496,12 @@
         </time>
         <position>
           <point>
-            <x>125.5634</x>
-            <y>5.25</y>
+            <x>133.1774</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0618</exact>
+          <exact>2.5446</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6513,15 +6513,15 @@
         </time>
         <position>
           <point>
-            <x>127.6253</x>
-            <y>5.25</y>
+            <x>135.7221</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0608</exact>
+          <exact>2.5443</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6530,12 +6530,12 @@
         </time>
         <position>
           <point>
-            <x>129.6861</x>
-            <y>5.25</y>
+            <x>138.2664</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0597</exact>
+          <exact>2.5439</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6547,12 +6547,12 @@
         </time>
         <position>
           <point>
-            <x>131.7459</x>
-            <y>5.25</y>
+            <x>140.8104</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0587</exact>
+          <exact>2.5435</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6564,12 +6564,12 @@
         </time>
         <position>
           <point>
-            <x>133.8046</x>
-            <y>5.25</y>
+            <x>143.3539</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0577</exact>
+          <exact>2.5431</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6581,15 +6581,15 @@
         </time>
         <position>
           <point>
-            <x>135.8623</x>
-            <y>5.25</y>
+            <x>145.8971</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0567</exact>
+          <exact>2.5428</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6598,15 +6598,15 @@
         </time>
         <position>
           <point>
-            <x>137.919</x>
-            <y>5.25</y>
+            <x>148.4399</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0557</exact>
+          <exact>2.5424</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6615,12 +6615,12 @@
         </time>
         <position>
           <point>
-            <x>139.9748</x>
-            <y>5.25</y>
+            <x>150.9824</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0548</exact>
+          <exact>2.542</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6632,15 +6632,15 @@
         </time>
         <position>
           <point>
-            <x>142.0296</x>
-            <y>5.25</y>
+            <x>153.5244</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0538</exact>
+          <exact>2.5416</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6649,15 +6649,15 @@
         </time>
         <position>
           <point>
-            <x>144.0835</x>
-            <y>5.25</y>
+            <x>156.0661</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0529</exact>
+          <exact>2.5413</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6666,15 +6666,15 @@
         </time>
         <position>
           <point>
-            <x>146.1364</x>
-            <y>5.25</y>
+            <x>158.6075</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.052</exact>
+          <exact>2.5409</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6683,12 +6683,12 @@
         </time>
         <position>
           <point>
-            <x>148.1885</x>
-            <y>5.25</y>
+            <x>161.1484</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0512</exact>
+          <exact>2.5406</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6700,15 +6700,15 @@
         </time>
         <position>
           <point>
-            <x>150.2397</x>
-            <y>5.25</y>
+            <x>163.689</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0503</exact>
+          <exact>2.5402</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6717,12 +6717,12 @@
         </time>
         <position>
           <point>
-            <x>152.2901</x>
-            <y>5.25</y>
+            <x>166.2293</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0495</exact>
+          <exact>2.5399</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6734,12 +6734,12 @@
         </time>
         <position>
           <point>
-            <x>154.3396</x>
-            <y>5.25</y>
+            <x>168.7693</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0487</exact>
+          <exact>2.5396</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6751,12 +6751,12 @@
         </time>
         <position>
           <point>
-            <x>156.3883</x>
-            <y>5.25</y>
+            <x>171.3089</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0479</exact>
+          <exact>2.5393</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6768,12 +6768,12 @@
         </time>
         <position>
           <point>
-            <x>158.4363</x>
-            <y>5.25</y>
+            <x>173.8482</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0471</exact>
+          <exact>2.539</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6785,12 +6785,12 @@
         </time>
         <position>
           <point>
-            <x>160.4834</x>
-            <y>5.25</y>
+            <x>176.3872</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0464</exact>
+          <exact>2.5387</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6802,15 +6802,15 @@
         </time>
         <position>
           <point>
-            <x>162.5299</x>
-            <y>5.25</y>
+            <x>178.9259</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0457</exact>
+          <exact>2.5384</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6819,12 +6819,12 @@
         </time>
         <position>
           <point>
-            <x>164.5756</x>
-            <y>5.25</y>
+            <x>181.4644</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.045</exact>
+          <exact>2.5381</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6836,15 +6836,15 @@
         </time>
         <position>
           <point>
-            <x>166.6206</x>
-            <y>5.25</y>
+            <x>184.0026</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0443</exact>
+          <exact>2.5379</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6853,15 +6853,15 @@
         </time>
         <position>
           <point>
-            <x>168.6649</x>
-            <y>5.25</y>
+            <x>186.5405</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0436</exact>
+          <exact>2.5376</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6870,15 +6870,15 @@
         </time>
         <position>
           <point>
-            <x>170.7086</x>
-            <y>5.25</y>
+            <x>189.0782</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.043</exact>
+          <exact>2.5374</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6887,15 +6887,15 @@
         </time>
         <position>
           <point>
-            <x>172.7516</x>
-            <y>5.25</y>
+            <x>191.6157</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0423</exact>
+          <exact>2.5372</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6904,15 +6904,15 @@
         </time>
         <position>
           <point>
-            <x>174.7939</x>
-            <y>5.25</y>
+            <x>194.1529</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0417</exact>
+          <exact>2.537</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -6921,12 +6921,12 @@
         </time>
         <position>
           <point>
-            <x>176.8357</x>
-            <y>5.25</y>
+            <x>196.69</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0412</exact>
+          <exact>2.5368</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6938,12 +6938,12 @@
         </time>
         <position>
           <point>
-            <x>178.8769</x>
-            <y>5.25</y>
+            <x>199.2268</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0406</exact>
+          <exact>2.5366</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6955,12 +6955,12 @@
         </time>
         <position>
           <point>
-            <x>180.9176</x>
-            <y>5.25</y>
+            <x>201.7635</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0401</exact>
+          <exact>2.5365</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6972,12 +6972,12 @@
         </time>
         <position>
           <point>
-            <x>182.9577</x>
-            <y>5.25</y>
+            <x>204.3001</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0395</exact>
+          <exact>2.5363</exact>
         </velocity>
         <orientation>
           <exact>-0.0</exact>
@@ -6989,15 +6989,15 @@
         </time>
         <position>
           <point>
-            <x>184.9973</x>
-            <y>5.25</y>
+            <x>206.8364</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.039</exact>
+          <exact>2.5362</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -7006,15 +7006,15 @@
         </time>
         <position>
           <point>
-            <x>187.0363</x>
-            <y>5.25</y>
+            <x>209.3726</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0386</exact>
+          <exact>2.536</exact>
         </velocity>
         <orientation>
-          <exact>-0.0</exact>
+          <exact>0.0</exact>
         </orientation>
       </state>
       <state>
@@ -7023,15 +7023,15 @@
         </time>
         <position>
           <point>
-            <x>189.0749</x>
-            <y>5.25</y>
+            <x>211.9087</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0381</exact>
+          <exact>2.5359</exact>
         </velocity>
         <orientation>
-          <exact>0.0</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -7040,15 +7040,15 @@
         </time>
         <position>
           <point>
-            <x>191.1131</x>
-            <y>5.25</y>
+            <x>214.4447</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0377</exact>
+          <exact>2.5358</exact>
         </velocity>
         <orientation>
-          <exact>0.0</exact>
+          <exact>-0.0</exact>
         </orientation>
       </state>
       <state>
@@ -7057,12 +7057,12 @@
         </time>
         <position>
           <point>
-            <x>193.1508</x>
-            <y>5.25</y>
+            <x>216.9806</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0372</exact>
+          <exact>2.5357</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7074,12 +7074,12 @@
         </time>
         <position>
           <point>
-            <x>195.1881</x>
-            <y>5.25</y>
+            <x>219.5164</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0368</exact>
+          <exact>2.5357</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7091,12 +7091,12 @@
         </time>
         <position>
           <point>
-            <x>197.225</x>
-            <y>5.25</y>
+            <x>222.0521</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0365</exact>
+          <exact>2.5356</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7108,12 +7108,12 @@
         </time>
         <position>
           <point>
-            <x>199.2615</x>
-            <y>5.25</y>
+            <x>224.5878</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0361</exact>
+          <exact>2.5355</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7125,12 +7125,12 @@
         </time>
         <position>
           <point>
-            <x>201.2976</x>
-            <y>5.25</y>
+            <x>227.1234</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0358</exact>
+          <exact>2.5355</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7142,12 +7142,12 @@
         </time>
         <position>
           <point>
-            <x>203.3334</x>
-            <y>5.25</y>
+            <x>229.6589</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0355</exact>
+          <exact>2.5355</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7159,12 +7159,12 @@
         </time>
         <position>
           <point>
-            <x>205.3689</x>
-            <y>5.25</y>
+            <x>232.1945</x>
+            <y>5.2499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0352</exact>
+          <exact>2.5355</exact>
         </velocity>
         <orientation>
           <exact>0.0</exact>
@@ -7209,10 +7209,10 @@
           </point>
         </position>
         <velocity>
-          <exact>0.2186</exact>
+          <exact>1.1500</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7221,15 +7221,15 @@
         </time>
         <position>
           <point>
-            <x>20.2186</x>
-            <y>-1.7499</y>
+            <x>21.1500</x>
+            <y>-1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>0.4221</exact>
+          <exact>2.0839</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7238,15 +7238,15 @@
         </time>
         <position>
           <point>
-            <x>20.6407</x>
-            <y>-1.7499</y>
+            <x>23.2339</x>
+            <y>-1.7503</y>
           </point>
         </position>
         <velocity>
-          <exact>0.6117</exact>
+          <exact>2.2433</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7255,15 +7255,15 @@
         </time>
         <position>
           <point>
-            <x>21.2525</x>
+            <x>25.4772</x>
             <y>-1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>0.7882</exact>
+          <exact>2.2697</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0013</exact>
         </orientation>
       </state>
       <state>
@@ -7272,15 +7272,15 @@
         </time>
         <position>
           <point>
-            <x>22.0407</x>
-            <y>-1.7499</y>
+            <x>27.7470</x>
+            <y>-1.7469</y>
           </point>
         </position>
         <velocity>
-          <exact>0.9525</exact>
+          <exact>2.2734</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>-0.0002</exact>
         </orientation>
       </state>
       <state>
@@ -7289,15 +7289,15 @@
         </time>
         <position>
           <point>
-            <x>22.9933</x>
-            <y>-1.7500</y>
+            <x>30.0205</x>
+            <y>-1.7476</y>
           </point>
         </position>
         <velocity>
-          <exact>1.1055</exact>
+          <exact>2.2733</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>-0.0193</exact>
         </orientation>
       </state>
       <state>
@@ -7306,15 +7306,15 @@
         </time>
         <position>
           <point>
-            <x>24.0989</x>
-            <y>-1.7500</y>
+            <x>32.2934</x>
+            <y>-1.7916</y>
           </point>
         </position>
         <velocity>
-          <exact>1.2480</exact>
+          <exact>2.2727</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>-0.0571</exact>
         </orientation>
       </state>
       <state>
@@ -7323,15 +7323,15 @@
         </time>
         <position>
           <point>
-            <x>25.3469</x>
-            <y>-1.7500</y>
+            <x>34.5624</x>
+            <y>-1.9215</y>
           </point>
         </position>
         <velocity>
-          <exact>1.3806</exact>
+          <exact>2.2716</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0185</exact>
         </orientation>
       </state>
       <state>
@@ -7340,15 +7340,15 @@
         </time>
         <position>
           <point>
-            <x>26.7276</x>
-            <y>-1.7499</y>
+            <x>36.8336</x>
+            <y>-1.9636</y>
           </point>
         </position>
         <velocity>
-          <exact>1.5041</exact>
+          <exact>2.2674</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.0214</exact>
         </orientation>
       </state>
       <state>
@@ -7357,15 +7357,15 @@
         </time>
         <position>
           <point>
-            <x>28.2317</x>
-            <y>-1.7499</y>
+            <x>39.1006</x>
+            <y>-1.9150</y>
           </point>
         </position>
         <velocity>
-          <exact>1.6190</exact>
+          <exact>2.2606</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.0614</exact>
         </orientation>
       </state>
       <state>
@@ -7374,15 +7374,15 @@
         </time>
         <position>
           <point>
-            <x>29.8507</x>
-            <y>-1.7499</y>
+            <x>41.3569</x>
+            <y>-1.7762</y>
           </point>
         </position>
         <velocity>
-          <exact>1.7260</exact>
+          <exact>2.2547</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.1014</exact>
         </orientation>
       </state>
       <state>
@@ -7391,15 +7391,15 @@
         </time>
         <position>
           <point>
-            <x>31.5768</x>
-            <y>-1.7500</y>
+            <x>43.6001</x>
+            <y>-1.5479</y>
           </point>
         </position>
         <velocity>
-          <exact>1.8256</exact>
+          <exact>2.2571</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.1414</exact>
         </orientation>
       </state>
       <state>
@@ -7408,15 +7408,15 @@
         </time>
         <position>
           <point>
-            <x>33.4024</x>
-            <y>-1.7500</y>
+            <x>45.8348</x>
+            <y>-1.2297</y>
           </point>
         </position>
         <velocity>
-          <exact>1.9183</exact>
+          <exact>2.2777</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.1814</exact>
         </orientation>
       </state>
       <state>
@@ -7425,15 +7425,15 @@
         </time>
         <position>
           <point>
-            <x>35.3208</x>
-            <y>-1.7500</y>
+            <x>48.0752</x>
+            <y>-0.8187</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0046</exact>
+          <exact>2.3260</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.2214</exact>
         </orientation>
       </state>
       <state>
@@ -7442,15 +7442,15 @@
         </time>
         <position>
           <point>
-            <x>37.3254</x>
-            <y>-1.7499</y>
+            <x>50.3444</x>
+            <y>-0.3079</y>
           </point>
         </position>
         <velocity>
-          <exact>2.0849</exact>
+          <exact>2.3909</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.2614</exact>
         </orientation>
       </state>
       <state>
@@ -7459,15 +7459,15 @@
         </time>
         <position>
           <point>
-            <x>39.4104</x>
-            <y>-1.7499</y>
+            <x>52.6542</x>
+            <y>0.3100</y>
           </point>
         </position>
         <velocity>
-          <exact>2.1596</exact>
+          <exact>2.3243</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.2214</exact>
         </orientation>
       </state>
       <state>
@@ -7476,15 +7476,15 @@
         </time>
         <position>
           <point>
-            <x>41.5701</x>
-            <y>-1.7500</y>
+            <x>54.9218</x>
+            <y>0.8205</y>
           </point>
         </position>
         <velocity>
-          <exact>2.2292</exact>
+          <exact>2.2743</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.1814</exact>
         </orientation>
       </state>
       <state>
@@ -7493,15 +7493,15 @@
         </time>
         <position>
           <point>
-            <x>43.7993</x>
-            <y>-1.7500</y>
+            <x>57.1588</x>
+            <y>1.2309</y>
           </point>
         </position>
         <velocity>
-          <exact>2.2939</exact>
+          <exact>2.2519</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.1414</exact>
         </orientation>
       </state>
       <state>
@@ -7510,15 +7510,15 @@
         </time>
         <position>
           <point>
-            <x>46.0933</x>
-            <y>-1.7500</y>
+            <x>59.3882</x>
+            <y>1.5484</y>
           </point>
         </position>
         <velocity>
-          <exact>2.3542</exact>
+          <exact>2.2476</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.1014</exact>
         </orientation>
       </state>
       <state>
@@ -7527,15 +7527,15 @@
         </time>
         <position>
           <point>
-            <x>48.4475</x>
-            <y>-1.7499</y>
+            <x>61.6243</x>
+            <y>1.7760</y>
           </point>
         </position>
         <velocity>
-          <exact>2.4103</exact>
+          <exact>2.2515</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>0.0614</exact>
         </orientation>
       </state>
       <state>
@@ -7544,15 +7544,15 @@
         </time>
         <position>
           <point>
-            <x>50.8578</x>
-            <y>-1.7499</y>
+            <x>63.8716</x>
+            <y>1.9142</y>
           </point>
         </position>
         <velocity>
-          <exact>2.4624</exact>
+          <exact>2.2564</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0214</exact>
         </orientation>
       </state>
       <state>
@@ -7561,15 +7561,15 @@
         </time>
         <position>
           <point>
-            <x>53.3203</x>
-            <y>-1.7500</y>
+            <x>66.1275</x>
+            <y>1.9626</y>
           </point>
         </position>
         <velocity>
-          <exact>2.5110</exact>
+          <exact>2.2587</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>-0.0185</exact>
         </orientation>
       </state>
       <state>
@@ -7578,15 +7578,15 @@
         </time>
         <position>
           <point>
-            <x>55.8314</x>
-            <y>-1.7503</y>
+            <x>68.3859</x>
+            <y>1.9206</y>
           </point>
         </position>
         <velocity>
-          <exact>2.5562</exact>
+          <exact>2.2580</exact>
         </velocity>
         <orientation>
-          <exact>0.0001</exact>
+          <exact>-0.0577</exact>
         </orientation>
       </state>
       <state>
@@ -7595,15 +7595,15 @@
         </time>
         <position>
           <point>
-            <x>58.3876</x>
-            <y>-1.7499</y>
+            <x>70.6402</x>
+            <y>1.7903</y>
           </point>
         </position>
         <velocity>
-          <exact>2.5982</exact>
+          <exact>2.2569</exact>
         </velocity>
         <orientation>
-          <exact>0.0010</exact>
+          <exact>-0.0194</exact>
         </orientation>
       </state>
       <state>
@@ -7612,15 +7612,15 @@
         </time>
         <position>
           <point>
-            <x>60.9859</x>
-            <y>-1.7471</y>
+            <x>72.8967</x>
+            <y>1.7465</y>
           </point>
         </position>
         <velocity>
-          <exact>2.6374</exact>
+          <exact>2.2561</exact>
         </velocity>
         <orientation>
-          <exact>-0.0011</exact>
+          <exact>0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7629,15 +7629,15 @@
         </time>
         <position>
           <point>
-            <x>63.6233</x>
-            <y>-1.7501</y>
+            <x>75.1529</x>
+            <y>1.7466</y>
           </point>
         </position>
         <velocity>
-          <exact>2.6738</exact>
+          <exact>2.2553</exact>
         </velocity>
         <orientation>
-          <exact>-0.0196</exact>
+          <exact>0.0015</exact>
         </orientation>
       </state>
       <state>
@@ -7646,15 +7646,15 @@
         </time>
         <position>
           <point>
-            <x>66.2967</x>
-            <y>-1.8025</y>
+            <x>77.4082</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.7077</exact>
+          <exact>2.2545</exact>
         </velocity>
         <orientation>
-          <exact>-0.0468</exact>
+          <exact>0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7663,15 +7663,15 @@
         </time>
         <position>
           <point>
-            <x>69.0015</x>
-            <y>-1.9293</y>
+            <x>79.6627</x>
+            <y>1.7504</y>
           </point>
         </position>
         <velocity>
-          <exact>2.7393</exact>
+          <exact>2.2537</exact>
         </velocity>
         <orientation>
-          <exact>-0.0068</exact>
+          <exact>-0.0001</exact>
         </orientation>
       </state>
       <state>
@@ -7680,15 +7680,15 @@
         </time>
         <position>
           <point>
-            <x>71.7407</x>
-            <y>-1.9480</y>
+            <x>81.9164</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.7687</exact>
+          <exact>2.2529</exact>
         </velocity>
         <orientation>
-          <exact>0.0331</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7697,15 +7697,15 @@
         </time>
         <position>
           <point>
-            <x>74.5079</x>
-            <y>-1.8562</y>
+            <x>84.1694</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.7961</exact>
+          <exact>2.2522</exact>
         </velocity>
         <orientation>
-          <exact>0.0731</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7714,15 +7714,15 @@
         </time>
         <position>
           <point>
-            <x>77.2966</x>
-            <y>-1.6518</y>
+            <x>86.4216</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.8217</exact>
+          <exact>2.2514</exact>
         </velocity>
         <orientation>
-          <exact>0.1131</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7731,15 +7731,15 @@
         </time>
         <position>
           <point>
-            <x>80.1003</x>
-            <y>-1.3332</y>
+            <x>88.6731</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.8457</exact>
+          <exact>2.2507</exact>
         </velocity>
         <orientation>
-          <exact>0.1531</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7748,15 +7748,15 @@
         </time>
         <position>
           <point>
-            <x>82.9127</x>
-            <y>-0.8990</y>
+            <x>90.9238</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.8681</exact>
+          <exact>2.2500</exact>
         </velocity>
         <orientation>
-          <exact>0.1931</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7765,15 +7765,15 @@
         </time>
         <position>
           <point>
-            <x>85.7276</x>
-            <y>-0.3484</y>
+            <x>93.1739</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.8887</exact>
+          <exact>2.2493</exact>
         </velocity>
         <orientation>
-          <exact>0.2331</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7782,15 +7782,15 @@
         </time>
         <position>
           <point>
-            <x>88.5381</x>
-            <y>0.3189</y>
+            <x>95.4232</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9065</exact>
+          <exact>2.2486</exact>
         </velocity>
         <orientation>
-          <exact>0.1931</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7799,15 +7799,15 @@
         </time>
         <position>
           <point>
-            <x>91.3906</x>
-            <y>0.8769</y>
+            <x>97.6718</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9227</exact>
+          <exact>2.2479</exact>
         </velocity>
         <orientation>
-          <exact>0.1531</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7816,15 +7816,15 @@
         </time>
         <position>
           <point>
-            <x>94.2792</x>
-            <y>1.3228</y>
+            <x>99.9197</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9377</exact>
+          <exact>2.2472</exact>
         </velocity>
         <orientation>
-          <exact>0.1131</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7833,15 +7833,15 @@
         </time>
         <position>
           <point>
-            <x>97.1981</x>
-            <y>1.6546</y>
+            <x>102.1670</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9518</exact>
+          <exact>2.2465</exact>
         </velocity>
         <orientation>
-          <exact>0.0731</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7850,15 +7850,15 @@
         </time>
         <position>
           <point>
-            <x>100.1421</x>
-            <y>1.8703</y>
+            <x>104.4136</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9649</exact>
+          <exact>2.2459</exact>
         </velocity>
         <orientation>
-          <exact>0.0331</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7867,15 +7867,15 @@
         </time>
         <position>
           <point>
-            <x>103.1054</x>
-            <y>1.9687</y>
+            <x>106.6595</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9771</exact>
+          <exact>2.2452</exact>
         </velocity>
         <orientation>
-          <exact>-0.0068</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7884,15 +7884,15 @@
         </time>
         <position>
           <point>
-            <x>106.0825</x>
-            <y>1.9483</y>
+            <x>108.9048</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9884</exact>
+          <exact>2.2446</exact>
         </velocity>
         <orientation>
-          <exact>-0.0468</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7901,15 +7901,15 @@
         </time>
         <position>
           <point>
-            <x>109.0676</x>
-            <y>1.8084</y>
+            <x>111.1495</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>2.9988</exact>
+          <exact>2.2440</exact>
         </velocity>
         <orientation>
-          <exact>-0.0195</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7918,15 +7918,15 @@
         </time>
         <position>
           <point>
-            <x>112.0659</x>
-            <y>1.7497</y>
+            <x>113.3935</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0085</exact>
+          <exact>2.2434</exact>
         </velocity>
         <orientation>
-          <exact>-0.0008</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7935,15 +7935,15 @@
         </time>
         <position>
           <point>
-            <x>115.0745</x>
-            <y>1.7470</y>
+            <x>115.6370</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0175</exact>
+          <exact>2.2428</exact>
         </velocity>
         <orientation>
-          <exact>0.0009</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7952,15 +7952,15 @@
         </time>
         <position>
           <point>
-            <x>118.0920</x>
-            <y>1.7500</y>
+            <x>117.8798</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0258</exact>
+          <exact>2.2422</exact>
         </velocity>
         <orientation>
-          <exact>0.0001</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7969,15 +7969,15 @@
         </time>
         <position>
           <point>
-            <x>121.1179</x>
-            <y>1.7503</y>
+            <x>120.1221</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0334</exact>
+          <exact>2.2416</exact>
         </velocity>
         <orientation>
-          <exact>-0.0001</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -7986,12 +7986,12 @@
         </time>
         <position>
           <point>
-            <x>124.1513</x>
+            <x>122.3638</x>
             <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0405</exact>
+          <exact>2.2411</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8003,15 +8003,15 @@
         </time>
         <position>
           <point>
-            <x>127.1919</x>
-            <y>1.7499</y>
+            <x>124.6049</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0471</exact>
+          <exact>2.2405</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8020,15 +8020,15 @@
         </time>
         <position>
           <point>
-            <x>130.2390</x>
-            <y>1.7499</y>
+            <x>126.8455</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0531</exact>
+          <exact>2.2400</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8037,15 +8037,15 @@
         </time>
         <position>
           <point>
-            <x>133.2922</x>
-            <y>1.7500</y>
+            <x>129.0855</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0587</exact>
+          <exact>2.2394</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8054,15 +8054,15 @@
         </time>
         <position>
           <point>
-            <x>136.3509</x>
-            <y>1.7500</y>
+            <x>131.3250</x>
+            <y>1.7499</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0638</exact>
+          <exact>2.2389</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8071,15 +8071,15 @@
         </time>
         <position>
           <point>
-            <x>139.4148</x>
-            <y>1.7499</y>
+            <x>133.5640</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0686</exact>
+          <exact>2.2384</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8088,15 +8088,15 @@
         </time>
         <position>
           <point>
-            <x>142.4834</x>
-            <y>1.7499</y>
+            <x>135.8024</x>
+            <y>1.7500</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0730</exact>
+          <exact>2.2379</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8105,15 +8105,15 @@
         </time>
         <position>
           <point>
-            <x>145.5564</x>
-            <y>1.7500</y>
+            <x>138.0404</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0770</exact>
+          <exact>2.2374</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8122,15 +8122,15 @@
         </time>
         <position>
           <point>
-            <x>148.6335</x>
-            <y>1.7500</y>
+            <x>140.2779</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0807</exact>
+          <exact>2.2370</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8139,12 +8139,12 @@
         </time>
         <position>
           <point>
-            <x>151.7142</x>
-            <y>1.7500</y>
+            <x>142.5149</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0841</exact>
+          <exact>2.2365</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8156,15 +8156,15 @@
         </time>
         <position>
           <point>
-            <x>154.7984</x>
-            <y>1.7499</y>
+            <x>144.7515</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0872</exact>
+          <exact>2.2361</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8173,15 +8173,15 @@
         </time>
         <position>
           <point>
-            <x>157.8857</x>
-            <y>1.7499</y>
+            <x>146.9876</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0901</exact>
+          <exact>2.2356</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8190,12 +8190,12 @@
         </time>
         <position>
           <point>
-            <x>160.9759</x>
-            <y>1.7500</y>
+            <x>149.2233</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0928</exact>
+          <exact>2.2352</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8207,15 +8207,15 @@
         </time>
         <position>
           <point>
-            <x>164.0687</x>
-            <y>1.7500</y>
+            <x>151.4585</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0952</exact>
+          <exact>2.2348</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8224,12 +8224,12 @@
         </time>
         <position>
           <point>
-            <x>167.1639</x>
-            <y>1.7499</y>
+            <x>153.6933</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0974</exact>
+          <exact>2.2344</exact>
         </velocity>
         <orientation>
           <exact>0.0000</exact>
@@ -8241,12 +8241,12 @@
         </time>
         <position>
           <point>
-            <x>170.2614</x>
-            <y>1.7499</y>
+            <x>155.9277</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.0994</exact>
+          <exact>2.2340</exact>
         </velocity>
         <orientation>
           <exact>0.0000</exact>
@@ -8258,15 +8258,15 @@
         </time>
         <position>
           <point>
-            <x>173.3608</x>
-            <y>1.7500</y>
+            <x>158.1617</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1012</exact>
+          <exact>2.2336</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8275,15 +8275,15 @@
         </time>
         <position>
           <point>
-            <x>176.4621</x>
-            <y>1.7500</y>
+            <x>160.3954</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1029</exact>
+          <exact>2.2332</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8292,12 +8292,12 @@
         </time>
         <position>
           <point>
-            <x>179.5651</x>
-            <y>1.7499</y>
+            <x>162.6286</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1044</exact>
+          <exact>2.2328</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8309,15 +8309,15 @@
         </time>
         <position>
           <point>
-            <x>182.6695</x>
-            <y>1.7499</y>
+            <x>164.8615</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1058</exact>
+          <exact>2.2325</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8326,15 +8326,15 @@
         </time>
         <position>
           <point>
-            <x>185.7754</x>
-            <y>1.7499</y>
+            <x>167.0941</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1070</exact>
+          <exact>2.2322</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8343,12 +8343,12 @@
         </time>
         <position>
           <point>
-            <x>188.8825</x>
-            <y>1.7500</y>
+            <x>169.3263</x>
+            <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1081</exact>
+          <exact>2.2318</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8360,12 +8360,12 @@
         </time>
         <position>
           <point>
-            <x>191.9906</x>
+            <x>171.5582</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1091</exact>
+          <exact>2.2315</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8377,12 +8377,12 @@
         </time>
         <position>
           <point>
-            <x>195.0998</x>
+            <x>173.7897</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1100</exact>
+          <exact>2.2312</exact>
         </velocity>
         <orientation>
           <exact>-0.0000</exact>
@@ -8394,15 +8394,15 @@
         </time>
         <position>
           <point>
-            <x>198.2099</x>
+            <x>176.0210</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1108</exact>
+          <exact>2.2309</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8411,15 +8411,15 @@
         </time>
         <position>
           <point>
-            <x>201.3207</x>
+            <x>178.2519</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1114</exact>
+          <exact>2.2306</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8428,15 +8428,15 @@
         </time>
         <position>
           <point>
-            <x>204.4322</x>
+            <x>180.4826</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1120</exact>
+          <exact>2.2304</exact>
         </velocity>
         <orientation>
-          <exact>0.0000</exact>
+          <exact>-0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8445,15 +8445,15 @@
         </time>
         <position>
           <point>
-            <x>207.5442</x>
+            <x>182.7130</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1125</exact>
+          <exact>2.2301</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8462,15 +8462,15 @@
         </time>
         <position>
           <point>
-            <x>210.6568</x>
+            <x>184.9432</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1129</exact>
+          <exact>2.2298</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8479,15 +8479,15 @@
         </time>
         <position>
           <point>
-            <x>213.7697</x>
+            <x>187.1731</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1132</exact>
+          <exact>2.2296</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8496,15 +8496,15 @@
         </time>
         <position>
           <point>
-            <x>216.8830</x>
+            <x>189.4027</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1134</exact>
+          <exact>2.2294</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8513,15 +8513,15 @@
         </time>
         <position>
           <point>
-            <x>219.9964</x>
+            <x>191.6321</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1136</exact>
+          <exact>2.2292</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
       <state>
@@ -8530,15 +8530,15 @@
         </time>
         <position>
           <point>
-            <x>223.1101</x>
+            <x>193.8613</x>
             <y>1.75</y>
           </point>
         </position>
         <velocity>
-          <exact>3.1137</exact>
+          <exact>2.2290</exact>
         </velocity>
         <orientation>
-          <exact>-0.0000</exact>
+          <exact>0.0000</exact>
         </orientation>
       </state>
     </trajectory>
