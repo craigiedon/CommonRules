@@ -5,31 +5,36 @@ import numpy as np
 
 import casadi
 from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle
+from commonroad.scenario.scenario import Scenario
+from commonroad.scenario.state import InitialState, KSState
 from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
+
 
 @dataclass
 class IntervalConstraint:
     value: Any
     time_interval: Tuple[float, float]
 
+
 @dataclass
 class TaskConfig:
     # time: float # Seconds
-    dt: float # steps/second
-    x_goal: float # Metres
-    y_goal: float # Metres
+    dt: float  # steps/second
+    x_goal: float  # Metres
+    y_goal: float  # Metres
     y_bounds: Tuple[float, float]
-    car_width: float # Metres
-    car_height: float # Metres
-    v_goal: float # Metres/Sec
-    v_max: float # Metres/Sec
-    acc_max: float # Metres/Sec**2
-    ang_vel_max: float # Metres/Sec
-    lanes: List[float] # Metres
+    car_width: float  # Metres
+    car_height: float  # Metres
+    v_goal: float  # Metres/Sec
+    v_max: float  # Metres/Sec
+    acc_max: float  # Metres/Sec**2
+    ang_vel_max: float  # Metres/Sec
+    lanes: List[float]  # Metres
     lane_targets: List[IntervalConstraint]
     collision_field_slope: float
+
 
 @dataclass
 class CostWeights:
@@ -60,13 +65,15 @@ class CarMPCRes:
     accs: np.ndarray
     ang_vels: np.ndarray
 
+
 @dataclass
 class RectObstacle:
-    x : float
+    x: float
     y: float
-    w : float # Width
-    h: float # Height
-    rot: float # Radians
+    w: float  # Width
+    h: float  # Height
+    rot: float  # Radians
+
 
 @dataclass
 class PolyConstraint:
@@ -81,9 +88,12 @@ class RectCustom(patches.Rectangle):
                 + transforms.Affine2D().rotate_deg_around(
                     bbox.x0 + bbox.width / 2.0, bbox.y0 + bbox.height / 2.0, self.angle))
 
+
 def obs_to_patch(obs: RectObstacle, color='r', alpha=1.0) -> patches.Rectangle:
-    r = RectCustom((obs.x - obs.w / 2.0, obs.y - obs.h / 2.0), obs.w, obs.h, np.rad2deg(obs.rot), facecolor=color, alpha=alpha)
+    r = RectCustom((obs.x - obs.w / 2.0, obs.y - obs.h / 2.0), obs.w, obs.h, np.rad2deg(obs.rot), facecolor=color,
+                   alpha=alpha)
     return r
+
 
 def to_poly_constraints(x: float, y: float, w: float, h: float, rot: float) -> PolyConstraint:
     A = casadi.blockcat([
@@ -94,9 +104,10 @@ def to_poly_constraints(x: float, y: float, w: float, h: float, rot: float) -> P
     ])
 
     b = casadi.vcat([h, h, w, w]) / 2.0 + A @ casadi.vcat([x, y])
-    return PolyConstraint(A = A, b=b)
+    return PolyConstraint(A=A, b=b)
 
-def to_numpy_polys(x:float, y:float, w: float, h: float, rot: float) -> PolyConstraint:
+
+def to_numpy_polys(x: float, y: float, w: float, h: float, rot: float) -> PolyConstraint:
     A = np.array([
         [np.sin(rot), -np.cos(rot)],
         [-np.sin(rot), np.cos(rot)],
@@ -105,10 +116,12 @@ def to_numpy_polys(x:float, y:float, w: float, h: float, rot: float) -> PolyCons
     ])
 
     b = np.array([h, h, w, w]) / 2.0 + A @ np.array([x, y])
-    return PolyConstraint(A = A, b=b)
+    return PolyConstraint(A=A, b=b)
 
 
-def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig, static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle], cw: Optional[CostWeights] = None, prev_solve:CarMPCRes = None) -> CarMPCRes:
+def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig,
+            static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle],
+            cw: Optional[CostWeights] = None, prev_solve: CarMPCRes = None) -> CarMPCRes:
     opti = casadi.Opti()
     start_step = int(np.round(start_time / task.dt))
     end_step = int(np.round(end_time / task.dt))
@@ -129,8 +142,8 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     # collision_slacks = opti.variable(T, 8 * len(static_obstacles) + 8 * len(dynamic_obstacles))
 
     # Distance to destination cost
-    x_progress_cost = casadi.sumsqr((xs - task.x_goal)) # / (start_state.x - task.x_goal))
-    y_progress_cost = casadi.sumsqr((ys - task.y_goal)) # / (start_state.y - task.y_goal))
+    x_progress_cost = casadi.sumsqr((xs - task.x_goal))  # / (start_state.x - task.x_goal))
+    y_progress_cost = casadi.sumsqr((ys - task.y_goal))  # / (start_state.y - task.y_goal))
 
     # Track the reference velocity
     vel_track_cost = casadi.sumsqr(vs - task.v_goal * task.dt)
@@ -158,16 +171,14 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     chosen_lanes = lane_selectors * lane_diffs
     lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
 
-    if cw is None:
-        cw = CostWeights()
-
+    # Obstacle Avoidance (Potential Fields)
     if len(static_obstacles) > 0:
         s_pots = []
         for s_obs in static_obstacles:
             s_x, s_y = s_obs.initial_state.position
             s_dist_x = ((xs - s_x) / s_obs.obstacle_shape.length) ** 2
             s_dist_y = ((ys - s_y) / s_obs.obstacle_shape.width) ** 2
-            s_pots.append(casadi.exp(-task.collision_field_slope*(s_dist_x + s_dist_y)))
+            s_pots.append(casadi.exp(-task.collision_field_slope * (s_dist_x + s_dist_y)))
         s_pots = casadi.vcat(s_pots)
         s_obs_cost = casadi.sum2(casadi.sum1(s_pots))
     else:
@@ -177,21 +188,24 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
         d_pots = []
         for d_obs in dynamic_obstacles:
             if start_step == 0:
-                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1, end_step-1)
+                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1,
+                                                                                                       end_step - 1)
             else:
-                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step-1)
+                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step - 1)
 
             d_xs = np.array([ds.position[0] for ds in d_states])
             d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2
 
             d_ys = np.array([ds.position[1] for ds in d_states])
             d_dist_y = ((ys - d_ys) / d_obs.obstacle_shape.width) ** 2
-            d_pots.append(casadi.exp(-task.collision_field_slope*(d_dist_x + d_dist_y)))
+            d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
         d_pots = casadi.vcat(d_pots)
         d_obs_cost = casadi.sum2(casadi.sum1(d_pots))
     else:
         d_obs_cost = 0.0
 
+    if cw is None:
+        cw = CostWeights()
 
     opti.minimize(cw.x_prog * x_progress_cost +
                   cw.y_prog * y_progress_cost +
@@ -204,7 +218,6 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
                   cw.collision_pot * s_obs_cost +
                   cw.collision_pot * d_obs_cost
                   )
-
 
     # Start State Constraints
     opti.subject_to(xs[0] == start_state.position[0])
@@ -221,7 +234,8 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     opti.subject_to(opti.bounded(0, casadi.vec(lane_selectors), 1))
 
     # Lane Bounds
-    opti.subject_to(opti.bounded(task.y_bounds[0] + task.car_height / 2.0, casadi.vec(ys), task.y_bounds[1] - task.car_height / 2.0))
+    opti.subject_to(opti.bounded(task.y_bounds[0] + task.car_height / 2.0, casadi.vec(ys),
+                                 task.y_bounds[1] - task.car_height / 2.0))
 
     # State Evolution
     opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1])
@@ -232,38 +246,7 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     # Lane Selection Simplex
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
-    # Avoid Obstacles
-    # if len(static_obstacles) + len(dynamic_obstacles) > 0:
-    #     opti.subject_to(casadi.vec(collision_slacks) > 0)
-
-
-
-    # if len(static_obstacles) > 0:
-    #     for t in range(T):
-    #         # Split up the slack variables by timestep, and by obstacle
-    #         c_slacks_t = casadi.horzsplit(collision_slacks[t, :], np.arange(0, len(static_obstacles) * 8 + 1, 8))
-    #         for s_obs, c_slack in zip(static_obstacles, c_slacks_t):
-    #             ego_poly = to_poly_constraints(xs[t], ys[t], task.car_width, task.car_height, hs[t])
-    #
-    #             wiggle_room = 0.1
-    #             obs_poly = to_numpy_polys(s_obs.initial_state.position[0], s_obs.initial_state.position[1],
-    #                                            s_obs.obstacle_shape.length + wiggle_room, s_obs.obstacle_shape.width + wiggle_room,
-    #                                            s_obs.initial_state.orientation)
-    #
-    #             full_A = casadi.vcat([ego_poly.A, obs_poly.A])
-    #             full_b = casadi.vcat([ego_poly.b, obs_poly.b])
-    #
-    #             # Use the slack variables to create a constraint
-    #
-    #             opti.subject_to(full_A.T @ c_slack.T == 0)
-    #             opti.subject_to(full_b.T @ c_slack.T < -1e-4)
-
-    if len(dynamic_obstacles) > 0:
-        pass
-
-
     opti.solver('ipopt', {"ipopt.print_level": 0})
-    # opti.solver('ipopt', {"ipopt.max_iter": 10000})
 
     if prev_solve is not None:
         opti.set_initial(xs, prev_solve.xs)
@@ -275,16 +258,10 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
 
     sol = opti.solve()
 
-    sol_selectors = sol.value(lane_selectors)
-    sol_lane_diffs = sol.value(lane_diffs)
-    # sol_slacks = sol.value(collision_slacks)
-
-    # sol_eqs = np.stack([sol.value(c) for c in col_eqs])
-    # sol_les = np.stack([sol.value(c) for c in col_les])
-
     res = CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
 
     return res
+
 
 def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectObstacle]):
     n_subplots = 4
@@ -310,7 +287,7 @@ def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectOb
     for obs in static_obstacles:
         axs_2.add_patch(obs_to_patch(obs))
     for x, y, h in zip(res.xs, res.ys, res.hs):
-        axs_2.add_patch(obs_to_patch(RectObstacle(x,y, task.car_width, task.car_height, h), color='b', alpha=0.2))
+        axs_2.add_patch(obs_to_patch(RectObstacle(x, y, task.car_width, task.car_height, h), color='b', alpha=0.2))
     axs_2.scatter(res.xs, res.ys, marker='x')
     axs_2.set_xlabel("X")
     axs_2.set_ylabel("Y")
@@ -318,29 +295,46 @@ def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectOb
     plt.show()
 
 
+def receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
+                     task_config: TaskConfig, cws: CostWeights) -> List[State]:
+    T = int(np.round(total_time / task_config.dt))
+    res = None
+    dn_state_list = []
+    current_state = start_state
+
+    for i in range(1, T):
+        res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
+                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, res)
+        current_state = KSState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1], orientation=res.hs[1],
+                                time_step=i)
+        dn_state_list.append(current_state)
+
+    return dn_state_list
+
+
 def run():
+    pass
     # Ford Escort Config. See Commonroad Vehicle Model Documentation
-    task_config = TaskConfig(time=5,
-                             dt=0.1,
-                             x_goal=700.0,
-                             y_goal=5.0,
-                             car_width=4.298,
-                             car_height=1.674,
-                             v_goal=31.29, # == 70mph
-                             v_max=45.8,
-                             acc_max=11.5,
-                             ang_vel_max=0.4,
-                             lanes=[-5.0, 0.0, 5.0])
-    obstacles = [
-        RectObstacle(40.0, 4.5, 4.3, 1.674, 0.0),
-        RectObstacle(5.0, 4.5, 4.3, 1.674, 0.0)
-    ]
-
-    res = car_mpc(CarState(0.0, 0.0, 0.0, 0.0), task_config, obstacles)
-
-    plot_results(res, task_config, obstacles)
+    # task_config = TaskConfig(time=5,
+    #                          dt=0.1,
+    #                          x_goal=700.0,
+    #                          y_goal=5.0,
+    #                          car_width=4.298,
+    #                          car_height=1.674,
+    #                          v_goal=31.29, # == 70mph
+    #                          v_max=45.8,
+    #                          acc_max=11.5,
+    #                          ang_vel_max=0.4,
+    #                          lanes=[-5.0, 0.0, 5.0])
+    # obstacles = [
+    #     RectObstacle(40.0, 4.5, 4.3, 1.674, 0.0),
+    #     RectObstacle(5.0, 4.5, 4.3, 1.674, 0.0)
+    # ]
+    #
+    # res = car_mpc(CarState(0.0, 0.0, 0.0, 0.0), task_config, obstacles)
+    #
+    # plot_results(res, task_config, obstacles)
 
 
 if __name__ == "__main__":
     run()
-
