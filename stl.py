@@ -1,7 +1,7 @@
 import abc
 import dataclasses
 from dataclasses import dataclass
-from typing import Callable, Any, List
+from typing import Callable, Any, List, Optional
 import numpy as np
 from scipy.special import logsumexp
 
@@ -84,9 +84,23 @@ class S(STLExp):
 class O(STLExp):
     """Once"""
     e: STLExp
+    t_start: int
+    t_end: int
 
 
-def stl_rob(spec: STLExp, x: Any, t: int) -> float:
+@dataclass(frozen=True)
+class H(STLExp):
+    """Historically/Previously"""
+    e: STLExp
+    t_start: int
+    t_end: int
+
+
+def remove_nones(x: List) -> List:
+    return list(filter(lambda v: v is not None, x))
+
+
+def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
     match spec:
         case Tru():
             return np.inf
@@ -97,36 +111,59 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> float:
         case Neg(e):
             return -stl_rob(e, x, t)
         case And(exps):
-            return np.minimum([stl_rob(e, x, t) for e in exps])
+            return np.min([stl_rob(e, x, t) for e in exps])
         case Or(exps):
-            return np.maximum([stl_rob(e, x, t) for e in exps])
+            return np.max([stl_rob(e, x, t) for e in exps])
         case G(e, t_start, t_end):
-            # g_interval = range(np.minimum(t + t_start, len(x)-1), np.minimum(t + t_end + 1, len(x)))
-            g_interval = [a for a in range(t + t_start, t + t_end + 1) if a < len(x)]
-            return np.min([stl_rob(e, x, a) for a in g_interval])
+            g_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+            if len(g_interval) == 0:
+                return None
+            rob_vals = remove_nones([stl_rob(e, x, a) for a in g_interval])
+            return np.min(rob_vals)
+        case H(e, t_start, t_end):
+            h_interval = range(max(t - t_end, 0), t - t_start + 1)
+            if len(h_interval) == 0:
+                return None
+            rob_vals = remove_nones([stl_rob(e, x, a) for a in h_interval])
+            return np.min(rob_vals)
         case F(e, t_start, t_end):
-            # f_interval = range(np.minimum(t + t_start, len(x)-1), np.minimum(t + t_end + 1, len(x)))
-            f_interval = [a for a in range(t + t_start, t + t_end + 1) if a < len(x)]
-            return np.max([stl_rob(e, x, a) for a in f_interval])
+            f_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+            if len(f_interval) == 0:
+                return None
+            rob_vals = remove_nones([stl_rob(e, x, a) for a in f_interval])
+            return np.max(rob_vals)
+        case O(e, t_start, t_end):
+            o_interval = range(max(t - t_end, 0), t - t_start + 1)
+            if len(o_interval) == 0:
+                return None
+            rob_vals = remove_nones([stl_rob(e, x, a) for a in o_interval])
+            return np.max(rob_vals)
         case U(e_1, e_2, t_start, t_end):
-            # u_interval = range(np.minimum(t + t_start, len(x)-1), np.minimum(t + t_end + 1, len(x)))
-            u_interval = [a for a in range(t + t_start, t + t_end + 1) if a < len(x)]
+            u_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+            if len(u_interval) == 0:
+                return None
 
-            rob_vals_lhs = [stl_rob(e_1, x, a) for a in u_interval]
-            rob_vals_rhs = [stl_rob(e_2, x, a) for a in u_interval]
+            lhs = remove_nones([stl_rob(e_1, x, a) for a in u_interval])
+            lhs_cums = [np.min(lhs[:k + 1]) for k in range(len(lhs))]
+            rhs = remove_nones([stl_rob(e_2, x, a) for a in u_interval])
 
-            lhs_cums = [np.min(rob_vals_lhs[t:a+1]) for a in u_interval]
-            running_vals = [np.minimum(rob_vals_rhs[a], lhs_cums[a]) for a in u_interval]
+            assert len(lhs) == len(rhs), f"Ill formed 'Until' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
+
+            running_vals = [min(rhs[a], lhs_cums[a]) for a in u_interval]
 
             return np.max(running_vals)
         case S(e_1, e_2, t_start, t_end):
-            s_interval = range(np.maximum(t - t_end, 0), np.maximum(t - t_start + 1, 0))
+            s_interval = range(max(t - t_end, 0), t - t_start + 1)
+            if len(s_interval) == 0:
+                return None
 
-            rob_vals_lhs = [stl_rob(e_1, x, a) for a in s_interval]
-            rob_vals_rhs = [stl_rob(e_2, x, a) for a in s_interval]
+            lhs = remove_nones([stl_rob(e_1, x, a) for a in s_interval])
+            lhs_cums = [np.min(lhs[:k + 1]) for k in range(len(lhs))]
+            rhs = remove_nones([stl_rob(e_2, x, a) for a in s_interval])
 
-            lhs_cums = [np.min(rob_vals_lhs[t:a + 1]) for a in s_interval]
-            running_vals = [np.minimum(rob_vals_rhs[a], lhs_cums[a]) for a in s_interval]
+            assert len(lhs) == len(rhs), f"Ill formed 'Since' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
+
+            running_vals = [min(rhs[a], lhs_cums[a]) for a in s_interval]
 
             return np.max(running_vals)
 

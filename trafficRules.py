@@ -1,22 +1,88 @@
+from typing import Dict, List
+
+import commonroad.scenario.state
 import numpy as np
+from commonroad.scenario.obstacle import Obstacle
+from commonroad.scenario.state import State, KSState
 
-from stl import G, GEQ0, stl_rob, F, U
-
-
-def in_same_lane() -> float:
-    return 0.0
+from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg
 
 
-def in_front_of() -> float:
-    return 0.0
+# We want List[Dict[int, State]]
+
+def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
+    return Or([And([in_lane(c1, l, lane_widths), in_lane(c2, l, lane_widths)]) for l in lane_centres])
 
 
-def cut_in() -> float:
-    return 0.0
+def in_lane(car: Obstacle, lane_centre: float, lane_width: float) -> STLExp:
+    def f(s: Dict[int, KSState]) -> float:
+        c_y = s[car.obstacle_id].position[1]
+        centre_dist = np.abs(lane_centre - c_y)
+        return centre_dist - lane_width / 2.0
+
+    return LEQ0(f)
 
 
-def keeps_safe_distance_prec() -> float:
-    return 0.0
+def rear(car: Obstacle, s: Dict[int, KSState]) -> float:
+    x = s[car.obstacle_id].position[0]
+    length = car.obstacle_shape.length
+    return x - length / 2.0
+
+
+def front(car: Obstacle, s: Dict[int, KSState]) -> float:
+    x = s[car.obstacle_id].position[0]
+    length = car.obstacle_shape.length
+    return x + length / 2.0
+
+
+# Is Car A in front of Car B
+def in_front_of(car_a: Obstacle, car_b: Obstacle) -> STLExp:
+    def f(s: Dict[int, KSState]) -> float:
+        a_rear = rear(car_a, s)
+        b_front = front(car_b, s)
+
+        return a_rear - b_front
+
+    return GEQ0(f)
+
+
+def turning_left(car: Obstacle) -> STLExp:
+    def f(s: Dict[int, KSState]) -> float:
+        return s[car.obstacle_id].orientation
+
+    return GEQ0(f)
+
+
+def turning_right(car: Obstacle) -> STLExp:
+    def f(s: Dict[int, KSState]) -> float:
+        return s[car.obstacle_id].orientation
+    return LEQ0(f)
+
+
+def cut_in(behind_car: Obstacle, cutter_car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
+    # TODO: Add single lane predicate, and also what is proj_d?
+    return And([Neg(single_lane(cutter_car)),
+                Or([
+                    And([turning_left(cutter_car)]),
+                    And([turning_right(cutter_car)])
+                ]),
+                in_same_lane(behind_car, cutter_car, lane_centres, lane_widths)])
+
+
+def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min: float, reaction_time: float) -> STLExp:
+    def f(s: Dict[int, KSState]) -> float:
+        front_v = s[front_car.obstacle_id].velocity
+        behind_v = s[behind_car.obstacle_id].velocity
+
+        behind_pot = ((behind_v ** 2) / (-2 * np.abs(acc_min)))
+        front_pot = ((front_v ** 2) / (-2 * np.abs(acc_min)))
+        safe_dist = behind_pot - front_pot + front_v * reaction_time
+
+        dist = rear(front_car, s) - front(behind_car)
+
+        return dist - safe_dist
+
+    return GEQ0(f)
 
 
 def unnecessary_braking() -> float:
@@ -122,7 +188,7 @@ if __name__ == "__main__":
     xs_2[:, 0] = 7
     xs_2[:, 1] = -2
 
-    test_stl_2 = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, T-1)
+    test_stl_2 = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, T - 1)
     rv_2 = stl_rob(test_stl_2, xs_2, 0)
 
     print("rv_2: ", rv_2)
