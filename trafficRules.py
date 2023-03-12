@@ -16,32 +16,61 @@ def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_wid
 
 def in_lane(car: Obstacle, lane_centre: float, lane_width: float) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
-        c_y = s[car.obstacle_id].position[1]
-        centre_dist = np.abs(lane_centre - c_y)
-        return centre_dist - lane_width / 2.0
+        car_ys = np.array([
+            s[car.obstacle_id].position[1],
+            front(car, s)[1],
+            rear(car, s)[1],
+            left(car, s)[1],
+            right(car, s)[1]
+        ])
+        dist = np.min(np.abs(car_ys - lane_centre))
+        return dist - lane_width / 2.0
 
     return LEQ0(f)
 
 
-def rear(car: Obstacle, s: Dict[int, KSState]) -> float:
-    x = s[car.obstacle_id].position[0]
-    length = car.obstacle_shape.length
-    return x - length / 2.0
+def rot_mat(r: float) -> np.ndarray:
+    return np.array(
+        [np.cos(r), -np.sin(r)],
+        [np.sin(r), np.cos(r)]
+    )
 
 
-def front(car: Obstacle, s: Dict[int, KSState]) -> float:
-    x = s[car.obstacle_id].position[0]
-    length = car.obstacle_shape.length
-    return x + length / 2.0
+def rear(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
+    pos = s[car.obstacle_id].position
+    rot = s[car.obstacle_id].orientation
+    offset = rot_mat(rot) @ np.array([car.obstacle_shape.length / 2.0, 0.0])
+    return pos - offset
+
+
+def front(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
+    pos = s[car.obstacle_id].position
+    rot = s[car.obstacle_id].orientation
+    offset = rot_mat(rot) @ np.array([car.obstacle_shape.length / 2.0, 0.0])
+    return pos + offset
+
+
+def left(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
+    pos = s[car.obstacle_id].position
+    rot = s[car.obstacle_id].orientation
+    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width])
+    return pos + offset
+
+
+def right(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
+    pos = s[car.obstacle_id].position
+    rot = s[car.obstacle_id].orientation
+    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width])
+    return pos - offset
 
 
 # Is Car A in front of Car B
 def in_front_of(car_a: Obstacle, car_b: Obstacle) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
-        a_rear = rear(car_a, s)
-        b_front = front(car_b, s)
+        a_rear_x = rear(car_a, s)[0]
+        b_front_x = front(car_b, s)[0]
 
-        return a_rear - b_front
+        return a_rear_x - b_front_x
 
     return GEQ0(f)
 
@@ -56,12 +85,30 @@ def turning_left(car: Obstacle) -> STLExp:
 def turning_right(car: Obstacle) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
         return s[car.obstacle_id].orientation
+
     return LEQ0(f)
 
 
+def single_lane(car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
+    single_lane_options = []
+    for chosen_lane_i in range(len(lane_centres)):
+        lane_choices = []
+        for j in range(len(lane_centres)):
+            if j == chosen_lane_i:
+                lane_choices.append(in_lane(car, lane_centres[j], lane_widths))
+            else:
+                lane_choices.append(Neg(in_lane(car, lane_centres[j], lane_widths)))
+
+        single_lane_options.append(And(lane_choices))
+
+    return Or(single_lane_options)
+
+
+
 def cut_in(behind_car: Obstacle, cutter_car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
+    def y_diff(behind_car: Obstacle, cutter)
     # TODO: Add single lane predicate, and also what is proj_d?
-    return And([Neg(single_lane(cutter_car)),
+    return And([Neg(single_lane(cutter_car, lane_centres, lane_widths)),
                 Or([
                     And([turning_left(cutter_car)]),
                     And([turning_right(cutter_car)])
@@ -78,7 +125,7 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
         front_pot = ((front_v ** 2) / (-2 * np.abs(acc_min)))
         safe_dist = behind_pot - front_pot + front_v * reaction_time
 
-        dist = rear(front_car, s) - front(behind_car)
+        dist = rear(front_car, s)[0] - front(behind_car, s)[0]
 
         return dist - safe_dist
 

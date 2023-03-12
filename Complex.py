@@ -14,8 +14,6 @@ from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWe
 from utils import animate_scenario
 
 
-
-
 def run():
     file_path = "scenarios/Complex.xml"
     scenario, planning_problem_set = CommonRoadFileReader(file_path).open()
