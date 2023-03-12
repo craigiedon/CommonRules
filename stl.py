@@ -45,6 +45,9 @@ class And(STLExp):
 class Or(STLExp):
     exps: List[STLExp]
 
+def Implies(e_lhs: STLExp, e_rhs: STLExp) -> STLExp:
+    return Or([Neg(e_lhs), e_rhs])
+
 
 @dataclass(frozen=True)
 class G(STLExp):
@@ -158,7 +161,7 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
                 return None
 
             lhs = remove_nones([stl_rob(e_1, x, a) for a in s_interval])
-            lhs_cums = [np.min(lhs[:k + 1]) for k in range(len(lhs))]
+            lhs_cums = [np.min(lhs[k:]) for k in range(len(lhs))]
             rhs = remove_nones([stl_rob(e_2, x, a) for a in s_interval])
 
             assert len(lhs) == len(rhs), f"Ill formed 'Since' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"

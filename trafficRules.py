@@ -5,7 +5,7 @@ import numpy as np
 from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.state import State, KSState
 
-from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg
+from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H
 
 
 # We want List[Dict[int, State]]
@@ -106,12 +106,15 @@ def single_lane(car: Obstacle, lane_centres: List[float], lane_widths: float) ->
 
 
 def cut_in(behind_car: Obstacle, cutter_car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
-    def y_diff(behind_car: Obstacle, cutter)
-    # TODO: Add single lane predicate, and also what is proj_d?
+    def y_diff(s: Dict[int, KSState]) -> float:
+        behind_y = s[behind_car.obstacle_id].position[1]
+        cut_y = s[behind_car.obstacle_id].position[1]
+        return behind_y - cut_y
+
     return And([Neg(single_lane(cutter_car, lane_centres, lane_widths)),
                 Or([
-                    And([turning_left(cutter_car)]),
-                    And([turning_right(cutter_car)])
+                    And([GEQ0(y_diff), turning_left(cutter_car)]),
+                    And([LEQ0(y_diff), turning_right(cutter_car)])
                 ]),
                 in_same_lane(behind_car, cutter_car, lane_centres, lane_widths)])
 
@@ -211,33 +214,34 @@ def on_main_carriageway():
 def main_carriageway_right_lain():
     return
 
+def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[float], lane_widths: float, acc_min: float, reaction_time: float, t_cut_in: int) -> STLExp:
+
+    positioning = And([in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+                       in_front_of(other_car, ego_car)])
+    cutting_behaviour = Neg(O(
+        And([cut_in(ego_car, other_car, lane_centres, lane_widths),
+             H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 1)
+             ]), 0, t_cut_in))
+    lhs = And([positioning, cutting_behaviour])
+
+    rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
+    return G(Implies(lhs, rhs), 0, 1000)
+
 
 def run():
-    pass
+
+    # TODO: Stick the parameters from the paper here
+    rg_1 = safe_dist_rule(ego_car, other_car, lane_centres, lane_widths, acc_min, reaction_time, t_cut_in)
+    rg_2  = None
+    rg_3  = None
+    rg_4  = None
+    rg_5  = None
+
+    ri_1 = None
+    ri_2 = None
+    ri_4 = None
+    ri_5 = None
 
 
 if __name__ == "__main__":
-    r_g1 = G(GEQ0(lambda x: x + 2), 0, 49)
-    # rv = stl_rob(r_g1, xs, 0)
-
-    T = 50
-    xs_1 = np.ones(T) * -2
-    xs_1[25:] = 3
-    xs_1[48:] = -10
-
-    test_stl_1 = F(G(GEQ0(lambda x: x), 2, 1000), 0, 10000)
-    rv_1 = stl_rob(test_stl_1, xs_1, 0)
-
-    print("rv_1:", rv_1)
-
-    xs_2 = np.zeros((T, 2))
-
-    xs_2[:, 0] = 7
-    xs_2[:, 1] = -2
-
-    test_stl_2 = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, T - 1)
-    rv_2 = stl_rob(test_stl_2, xs_2, 0)
-
-    print("rv_2: ", rv_2)
-
     run()
