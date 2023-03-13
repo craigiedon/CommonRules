@@ -8,8 +8,6 @@ from commonroad.scenario.state import State, KSState
 from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H
 
 
-# We want List[Dict[int, State]]
-
 def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
     return Or([And([in_lane(c1, l, lane_widths), in_lane(c2, l, lane_widths)]) for l in lane_centres])
 
@@ -30,9 +28,9 @@ def in_lane(car: Obstacle, lane_centre: float, lane_width: float) -> STLExp:
 
 
 def rot_mat(r: float) -> np.ndarray:
-    return np.array(
+    return np.array([
         [np.cos(r), -np.sin(r)],
-        [np.sin(r), np.cos(r)]
+        [np.sin(r), np.cos(r)]]
     )
 
 
@@ -53,14 +51,14 @@ def front(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
 def left(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
     pos = s[car.obstacle_id].position
     rot = s[car.obstacle_id].orientation
-    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width])
+    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width / 2.0])
     return pos + offset
 
 
 def right(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
     pos = s[car.obstacle_id].position
     rot = s[car.obstacle_id].orientation
-    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width])
+    offset = rot_mat(rot) @ np.array([0.0, car.obstacle_shape.width / 2.0])
     return pos - offset
 
 
@@ -104,11 +102,10 @@ def single_lane(car: Obstacle, lane_centres: List[float], lane_widths: float) ->
     return Or(single_lane_options)
 
 
-
 def cut_in(behind_car: Obstacle, cutter_car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
     def y_diff(s: Dict[int, KSState]) -> float:
         behind_y = s[behind_car.obstacle_id].position[1]
-        cut_y = s[behind_car.obstacle_id].position[1]
+        cut_y = s[cutter_car.obstacle_id].position[1]
         return behind_y - cut_y
 
     return And([Neg(single_lane(cutter_car, lane_centres, lane_widths)),
@@ -214,8 +211,9 @@ def on_main_carriageway():
 def main_carriageway_right_lain():
     return
 
-def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[float], lane_widths: float, acc_min: float, reaction_time: float, t_cut_in: int) -> STLExp:
 
+def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[float], lane_widths: float,
+                   acc_min: float, reaction_time: float, t_cut_in: int) -> STLExp:
     positioning = And([in_same_lane(ego_car, other_car, lane_centres, lane_widths),
                        in_front_of(other_car, ego_car)])
     cutting_behaviour = Neg(O(
@@ -229,13 +227,12 @@ def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[fl
 
 
 def run():
-
     # TODO: Stick the parameters from the paper here
     rg_1 = safe_dist_rule(ego_car, other_car, lane_centres, lane_widths, acc_min, reaction_time, t_cut_in)
-    rg_2  = None
-    rg_3  = None
-    rg_4  = None
-    rg_5  = None
+    rg_2 = None
+    rg_3 = None
+    rg_4 = None
+    rg_5 = None
 
     ri_1 = None
     ri_2 = None

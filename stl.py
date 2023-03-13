@@ -45,6 +45,7 @@ class And(STLExp):
 class Or(STLExp):
     exps: List[STLExp]
 
+
 def Implies(e_lhs: STLExp, e_rhs: STLExp) -> STLExp:
     return Or([Neg(e_lhs), e_rhs])
 
@@ -114,9 +115,15 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
         case Neg(e):
             return -stl_rob(e, x, t)
         case And(exps):
-            return np.min([stl_rob(e, x, t) for e in exps])
+            rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
+            if len(rob_vals) == 0:
+                return None
+            return np.min(rob_vals)
         case Or(exps):
-            return np.max([stl_rob(e, x, t) for e in exps])
+            rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
+            if len(rob_vals) == 0:
+                return None
+            return np.max(rob_vals)
         case G(e, t_start, t_end):
             g_interval = range(t + t_start, min(t + t_end + 1, len(x)))
             if len(g_interval) == 0:

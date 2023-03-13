@@ -46,7 +46,8 @@ def run():
     dyn_obs_shape = Rectangle(width=task_config.car_height, length=task_config.car_width)
     dyn_obs_traj = Trajectory(1, dn_state_list)
     dyn_obs_pred = TrajectoryPrediction(dyn_obs_traj, dyn_obs_shape)
-    dyn_obs = DynamicObstacle(scenario.generate_object_id(),
+    ego_id = 100
+    dyn_obs = DynamicObstacle(ego_id,
                               ObstacleType.CAR,
                               dyn_obs_shape,
                               start_state,
@@ -56,6 +57,11 @@ def run():
 
     animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt),
                      ego_v=dyn_obs)  # , save_path="complexAnim.gif")
+
+
+    scenario_save_path = "scenarios/Complex_Solution.xml"
+    fw = CommonRoadFileWriter(scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
+    fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
 
 if __name__ == "__main__":
