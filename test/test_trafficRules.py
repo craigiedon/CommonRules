@@ -3,12 +3,12 @@ from typing import List, Dict
 import numpy as np
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.obstacle import StaticObstacle, ObstacleType, DynamicObstacle, Obstacle
-from commonroad.scenario.state import KSState, InitialState
+from commonroad.scenario.state import KSState, InitialState, CustomState
 from pytest import approx
 
 from stl import stl_rob
 from trafficRules import front, rear, left, right, in_lane, in_same_lane, in_front_of, turning_left, single_lane, \
-    cut_in, keeps_safe_distance_prec, safe_dist_rule
+    cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking
 
 
 def test_front():
@@ -468,3 +468,147 @@ def test_safe_dist_rule_recent_cut_in():
     result = stl_rob(e, xs, 0)
 
     assert result > 0
+
+
+def test_unnecessary_braking_positive_acc():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=5.0, orientation=0.0, time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-5.0 + a_abrupt)
+
+
+def test_unnecessary_braking_abrupt_on_clear_road():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-1.0, orientation=0.0, time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1 + a_abrupt)
+
+
+def test_unnecessary_braking_follower_abruptness():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.3, orientation=0.0, time_step=0),
+            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.1)
+
+
+def test_unnecessary_braking_clear_but_not_abrupt():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-0.05, orientation=0.0, time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-0.15)
+
+
+def test_unncessary_braking_follow_but_not_abrupt():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.1, orientation=0.0, time_step=0),
+            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-0.1)
+
+
+def test_unnecessary_braking_follow_but_not_safe_distance_prec():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-11.0, orientation=0.0, time_step=0),
+            1: CustomState(position=[4.1, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+        }
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result < 0

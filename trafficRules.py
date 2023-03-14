@@ -3,9 +3,9 @@ from typing import Dict, List
 import commonroad.scenario.state
 import numpy as np
 from commonroad.scenario.obstacle import Obstacle
-from commonroad.scenario.state import State, KSState
+from commonroad.scenario.state import State, KSState, CustomState
 
-from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H
+from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H, LEQ
 
 
 def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
@@ -132,8 +132,45 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
     return GEQ0(f)
 
 
-def unnecessary_braking() -> float:
-    return 0.0
+def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
+                        a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
+    def ego_acc(s: Dict[int, CustomState]) -> float:
+        return s[ego_car.obstacle_id].acceleration
+
+    # lhs = LEQ0(ego_acc)
+
+    front_lane_checks = []
+    for other_car in other_cars:
+        front_lane_checks.append(
+            And([
+                in_front_of(other_car, ego_car),
+                in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+            ])
+        )
+    nothing_up_front = Neg(Or(front_lane_checks))
+
+    def abrupt_difference(behind_car: Obstacle, front_car: Obstacle) -> STLExp:
+        def acc_diff(s: Dict[int, CustomState]) -> float:
+            b_acc = s[behind_car.obstacle_id].acceleration
+            f_acc = s[front_car.obstacle_id].acceleration
+            diff = b_acc - f_acc
+            return diff
+
+        return LEQ(acc_diff, a_abrupt)
+
+    follow_abruptness = []
+    for other_car in other_cars:
+        follow_abruptness.append(And([
+            keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time),
+            in_front_of(other_car, ego_car),
+            in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+            abrupt_difference(ego_car, other_car)
+        ]))
+
+    return Or([
+        And([nothing_up_front, LEQ(ego_acc, a_abrupt)]),
+        Or(follow_abruptness)
+    ])
 
 
 def keeps_lane_speed_limit() -> float:
@@ -208,7 +245,7 @@ def on_main_carriageway():
     return
 
 
-def main_carriageway_right_lain():
+def main_carriageway_right_lane():
     return
 
 
@@ -226,9 +263,13 @@ def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[fl
     return G(Implies(lhs, rhs), 0, 1000)
 
 
+def no_unnecessary_braking_rule(ego_car: Obstacle, other_cars: Obstacle, lane_centres: List[float], lane_widths: float,
+                                a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
+    return G(Neg(unnecessary_braking(ego_car, other_cars, lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)),
+             0, 1000)
+
+
 def run():
-    # TODO: Stick the parameters from the paper here
-    rg_1 = safe_dist_rule(ego_car, other_car, lane_centres, lane_widths, acc_min, reaction_time, t_cut_in)
     rg_2 = None
     rg_3 = None
     rg_4 = None

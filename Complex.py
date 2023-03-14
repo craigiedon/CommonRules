@@ -35,11 +35,11 @@ def run():
                              ang_vel_max=0.4,
                              lanes=lane_centres,
                              lane_targets=[],
-                             collision_field_slope=0.9)
+                             collision_field_slope=0.85)
 
     start_state = InitialState(position=np.array([10.0, lane_centres[0]]), velocity=0.0, orientation=0, time_step=0)
 
-    cws = CostWeights(x_prog=0.0001, y_prog=0.0, jerk=5, v_track=10, lane_align=1, collision_pot=20)
+    cws = CostWeights(x_prog=0.0001, y_prog=0.01, jerk=5, v_track=30, lane_align=1, collision_pot=200)
 
     dn_state_list = receding_horizon(end_time, 1.0, start_state, scenario, task_config, cws)
 
@@ -56,7 +56,7 @@ def run():
     scenario.add_objects(dyn_obs)
 
     animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt),
-                     ego_v=dyn_obs)  # , save_path="complexAnim.gif")
+                     ego_v=dyn_obs, show=True)  # , save_path="complexAnim.gif")
 
 
     scenario_save_path = "scenarios/Complex_Solution.xml"

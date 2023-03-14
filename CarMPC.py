@@ -6,7 +6,7 @@ import numpy as np
 import casadi
 from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle
 from commonroad.scenario.scenario import Scenario
-from commonroad.scenario.state import InitialState, KSState
+from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
@@ -172,12 +172,13 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
 
     # Obstacle Avoidance (Potential Fields)
+    lateral_slack = 0.9
     if len(static_obstacles) > 0:
         s_pots = []
         for s_obs in static_obstacles:
             s_x, s_y = s_obs.initial_state.position
             s_dist_x = ((xs - s_x) / s_obs.obstacle_shape.length) ** 2
-            s_dist_y = ((ys - s_y) / s_obs.obstacle_shape.width) ** 2
+            s_dist_y = ((ys - s_y) / (s_obs.obstacle_shape.width * lateral_slack)) ** 2
             s_pots.append(casadi.exp(-task.collision_field_slope * (s_dist_x + s_dist_y)))
         s_pots = casadi.vcat(s_pots)
         s_obs_cost = casadi.sum2(casadi.sum1(s_pots))
@@ -197,7 +198,7 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
             d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2
 
             d_ys = np.array([ds.position[1] for ds in d_states])
-            d_dist_y = ((ys - d_ys) / d_obs.obstacle_shape.width) ** 2
+            d_dist_y = ((ys - d_ys) / (d_obs.obstacle_shape.width * lateral_slack)) ** 2
             d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
         d_pots = casadi.vcat(d_pots)
         d_obs_cost = casadi.sum2(casadi.sum1(d_pots))
@@ -305,8 +306,8 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
     for i in range(1, T):
         res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
                       scenario.static_obstacles, scenario.dynamic_obstacles, cws, res)
-        current_state = KSState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1], orientation=res.hs[1],
-                                time_step=i)
+        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1], orientation=res.hs[1],
+                                    acceleration=res.accs[1], time_step=i)
         dn_state_list.append(current_state)
 
     return dn_state_list

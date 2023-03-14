@@ -26,9 +26,17 @@ class GEQ0(STLExp):
     f: Callable
 
 
+def GEQ(f: Callable, c: float) -> STLExp:
+    return GEQ0(lambda x: f(x) - c)
+
+
 @dataclass(frozen=True)
 class LEQ0(STLExp):
     f: Callable
+
+
+def LEQ(f: Callable, c: float) -> STLExp:
+    return LEQ0(lambda x: f(x) - c)
 
 
 @dataclass(frozen=True)

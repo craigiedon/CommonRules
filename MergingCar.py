@@ -4,7 +4,7 @@ from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistin
 from commonroad.geometry.shape import Rectangle
 from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
-from commonroad.scenario.state import InitialState, KSState
+from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State, Trajectory
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights
@@ -43,7 +43,7 @@ def run():
 
     dyn_obs_shape = Rectangle(width=1.674, length=4.298)
 
-    dn_state_list = [KSState(position=[x,y], velocity=v, orientation=h, time_step=i) for i, (x, y, v, h) in enumerate(zip(res.xs, res.ys, res.vs, res.hs))][1:]
+    dn_state_list = [CustomState(position=[x,y], velocity=v, acceleration=a, orientation=h, time_step=i) for i, (x, y, v, a, h) in enumerate(zip(res.xs, res.ys, res.vs, res.accs, res.hs))][1:]
 
     dyn_obs_traj = Trajectory(1, dn_state_list)
     dyn_obs_pred = TrajectoryPrediction(dyn_obs_traj, dyn_obs_shape)
@@ -56,7 +56,7 @@ def run():
 
     scenario.add_objects(dyn_obs)
 
-    animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt)) #save_path="cutInAnim.gif")
+    animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt), show=True) #save_path="cutInAnim.gif")
 
     scenario_save_path = "scenarios/Complex.xml"
     fw = CommonRoadFileWriter(scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
