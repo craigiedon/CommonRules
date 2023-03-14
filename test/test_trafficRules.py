@@ -8,7 +8,7 @@ from pytest import approx
 
 from stl import stl_rob
 from trafficRules import front, rear, left, right, in_lane, in_same_lane, in_front_of, turning_left, single_lane, \
-    cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking
+    cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking, traffic_flow_rule
 
 
 def test_front():
@@ -484,8 +484,10 @@ def test_unnecessary_braking_positive_acc():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=5.0, orientation=0.0, time_step=0),
-            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=5.0, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
@@ -508,8 +510,10 @@ def test_unnecessary_braking_abrupt_on_clear_road():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-1.0, orientation=0.0, time_step=0),
-            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-1.0, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
@@ -532,8 +536,10 @@ def test_unnecessary_braking_follower_abruptness():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.3, orientation=0.0, time_step=0),
-            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.3, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
@@ -556,8 +562,10 @@ def test_unnecessary_braking_clear_but_not_abrupt():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-0.05, orientation=0.0, time_step=0),
-            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-0.05, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
@@ -580,8 +588,10 @@ def test_unncessary_braking_follow_but_not_abrupt():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.1, orientation=0.0, time_step=0),
-            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-10.1, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[10.0, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
@@ -604,11 +614,79 @@ def test_unnecessary_braking_follow_but_not_safe_distance_prec():
 
     xs = [
         {
-            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-11.0, orientation=0.0, time_step=0),
-            1: CustomState(position=[4.1, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0, time_step=0),
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=-11.0, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[4.1, lane_centres[0]], velocity=1.0, acceleration=-10.0, orientation=0.0,
+                           time_step=0),
         }
     ]
 
     result = stl_rob(e, xs, 0)
 
     assert result < 0
+
+
+def test_traffic_flow_rule_slow_lead():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    speed_limit = 31 * dt
+    slow_delta = 15 * dt
+
+    allowable_speed = speed_limit - slow_delta
+
+    e = traffic_flow_rule(ego_car, [other_car], lane_centres, lane_widths, speed_limit, slow_delta)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=allowable_speed - 0.5, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.5)
+
+
+def test_traffic_flow_flow_preserved():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    speed_limit = 31 * dt
+    slow_delta = 15 * dt
+
+    allowable_speed = speed_limit - slow_delta
+
+    e = traffic_flow_rule(ego_car, [other_car], lane_centres, lane_widths, speed_limit, slow_delta)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=allowable_speed + 0.2, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=speed_limit, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.2)
+
+
+def test_traffic_flow_flow_not_preserved():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    speed_limit = 31 * dt
+    slow_delta = 15 * dt
+
+    allowable_speed = speed_limit - slow_delta
+
+    e = traffic_flow_rule(ego_car, [other_car], lane_centres, lane_widths, speed_limit, slow_delta)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=allowable_speed - 0.1, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=speed_limit, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-0.1)
