@@ -47,6 +47,7 @@ class CostWeights:
     road_align: float = 1
     lane_align: float = 1
     collision_pot: float = 1
+    faster_left: float = 1
 
 
 # @dataclass
@@ -205,6 +206,28 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     else:
         d_obs_cost = 0.0
 
+    if len(dynamic_obstacles) > 0:
+        f_left_costs = []
+        for d_obs in dynamic_obstacles:
+            if start_step == 0:
+                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1,
+                                                                                                       end_step - 1)
+            else:
+                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step - 1)
+
+            d_xs = np.array([ds.position[0] for ds in d_states])
+            d_ys = np.array([ds.position[1] for ds in d_states])
+            d_vs = np.array([ds.velocity for ds in d_states])
+
+            left_flag = casadi.lt(ys + task.car_height / 2.0, d_ys - d_obs.obstacle_shape.width / 2.0)
+            x_flag = casadi.lt(casadi.fabs(xs - d_xs), (task.car_width + d_obs.obstacle_shape.length) / 2.0 + 10)
+            vel_diffs = casadi.fmax(vs - d_vs, 0.0)
+            f_left_costs.append(left_flag * x_flag * vel_diffs)
+        f_lefts_combined = casadi.vcat(f_left_costs)
+        f_left_cost = casadi.sumsqr(f_lefts_combined)
+    else:
+        f_left_cost = 0.0
+
     if cw is None:
         cw = CostWeights()
 
@@ -217,7 +240,8 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
                   cw.road_align * road_align_cost +
                   cw.lane_align * lane_align_cost +
                   cw.collision_pot * s_obs_cost +
-                  cw.collision_pot * d_obs_cost
+                  cw.collision_pot * d_obs_cost +
+                  cw.faster_left * f_left_cost
                   )
 
     # Start State Constraints
@@ -306,7 +330,8 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
     for i in range(1, T):
         res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
                       scenario.static_obstacles, scenario.dynamic_obstacles, cws, res)
-        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1], orientation=res.hs[1],
+        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
+                                    orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)
         dn_state_list.append(current_state)
 

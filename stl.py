@@ -26,8 +26,12 @@ class GEQ0(STLExp):
     f: Callable
 
 
-def GEQ(f: Callable, c: float) -> STLExp:
+def GEQc(f: Callable, c: float) -> STLExp:
     return GEQ0(lambda x: f(x) - c)
+
+
+def GEQ(f: Callable, g: Callable) -> STLExp:
+    return GEQ0(lambda x: f(x) - g(x))
 
 
 @dataclass(frozen=True)
@@ -35,8 +39,12 @@ class LEQ0(STLExp):
     f: Callable
 
 
-def LEQ(f: Callable, c: float) -> STLExp:
+def LEQc(f: Callable, c: float) -> STLExp:
     return LEQ0(lambda x: f(x) - c)
+
+
+def LEQ(f: Callable, g: Callable) -> STLExp:
+    return LEQ0(lambda x: f(x) - g(x))
 
 
 @dataclass(frozen=True)
@@ -167,7 +175,7 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
 
             assert len(lhs) == len(rhs), f"Ill formed 'Until' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
 
-            running_vals = [min(rhs[a], lhs_cums[a]) for a in u_interval]
+            running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
 
             return np.max(running_vals)
         case S(e_1, e_2, t_start, t_end):
@@ -181,7 +189,7 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
 
             assert len(lhs) == len(rhs), f"Ill formed 'Since' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
 
-            running_vals = [min(rhs[a], lhs_cums[a]) for a in s_interval]
+            running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
 
             return np.max(running_vals)
 

@@ -9,6 +9,7 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticOb
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.state import InitialState, KSState
 from commonroad.scenario.trajectory import State, Trajectory
+from matplotlib import pyplot as plt
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights, receding_horizon
 from utils import animate_scenario
@@ -39,7 +40,7 @@ def run():
 
     start_state = InitialState(position=np.array([10.0, lane_centres[0]]), velocity=0.0, orientation=0, time_step=0)
 
-    cws = CostWeights(x_prog=0.0001, y_prog=0.01, jerk=5, v_track=30, lane_align=1, collision_pot=200)
+    cws = CostWeights(x_prog=0.0001, y_prog=0.01, jerk=5, v_track=30, lane_align=1, collision_pot=200, faster_left=200)
 
     dn_state_list = receding_horizon(end_time, 1.0, start_state, scenario, task_config, cws)
 

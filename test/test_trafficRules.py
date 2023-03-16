@@ -8,7 +8,8 @@ from pytest import approx
 
 from stl import stl_rob
 from trafficRules import front, rear, left, right, in_lane, in_same_lane, in_front_of, turning_left, single_lane, \
-    cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking, traffic_flow_rule
+    cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking, traffic_flow_rule, interstate_stopping_rule, \
+    left_of, in_congestion, slightly_higher_speed, faster_than_left_rule, consider_entering_vehicles_rule
 
 
 def test_front():
@@ -690,3 +691,617 @@ def test_traffic_flow_flow_not_preserved():
     result = stl_rob(e, xs, 0)
 
     assert result == approx(-0.1)
+
+
+def test_interstate_stopping_standing_leading_v():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+    v_err = 0.01 * dt
+
+    e = interstate_stopping_rule(ego_car, [other_car], lane_centres, lane_widths, v_err)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(v_err)
+
+
+def test_interstate_stopping_ego_standstill():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+    v_err = 0.01 * dt
+
+    e = interstate_stopping_rule(ego_car, [other_car], lane_centres, lane_widths, v_err)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-v_err)
+
+
+def test_interstate_stopping_ego_not_standstill():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+    v_err = 0.01 * dt
+
+    e = interstate_stopping_rule(ego_car, [other_car], lane_centres, lane_widths, v_err)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(10 - v_err)
+
+
+def test_left_of_not_left():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-5)
+
+
+def test_left_of_rear_between():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[0.5, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.5)
+
+
+def test_left_of_front_between():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.3, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.3)
+
+
+def test_left_of_bigger_car():
+    ego_car, other_car = gen_cars(2)
+    ego_car.obstacle_shape.length = 5.0
+
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.5)
+
+
+def test_left_of_way_behind():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[-10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-10 + 4)
+
+
+def test_left_of_way_front():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+
+    e = left_of(ego_car, other_car)
+
+    xs = [{
+        0: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-10 + 4)
+
+
+def test_in_congestion_generous_congestion():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.76 * dt
+    congestion_size = 3
+
+    e = in_congestion(ego_car, [other_car], lane_centres, lane_widths, congestion_vel, congestion_size)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-np.inf)
+
+
+def test_in_congestion_no_congestion():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.76 * dt
+    congestion_size = 1
+
+    e = in_congestion(ego_car, [other_car], lane_centres, lane_widths, congestion_vel, congestion_size)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[1]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-1.0)
+
+
+def test_in_congestion_not_enough_congestion():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.76 * dt
+    congestion_size = 2
+
+    e = in_congestion(ego_car, other_cars, lane_centres, lane_widths, congestion_vel, congestion_size)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[1]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-1.0)
+
+
+def test_in_congestion_not_slow_enough():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.76 * dt
+    congestion_size = 1
+
+    e = in_congestion(ego_car, [other_car], lane_centres, lane_widths, congestion_vel, congestion_size)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-10 + congestion_vel)
+
+
+def test_in_congestion_congested():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.76 * dt
+    congestion_size = 1
+
+    e = in_congestion(ego_car, [other_car], lane_centres, lane_widths, congestion_vel, congestion_size)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(congestion_vel)
+
+
+def test_slightly_higher_speed_within():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+
+    diff_thresh = 1.0
+
+    e = slightly_higher_speed(ego_car, other_car, diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.7, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.3)
+
+
+def test_slightly_higher_speed_slower():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    diff_thresh = 1.0
+
+    e = slightly_higher_speed(ego_car, other_car, diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=1.2, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-1.2)
+
+
+def test_slightly_higher_speed_too_fast():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [1.75, 5.25]
+    diff_thresh = 1.0
+
+    e = slightly_higher_speed(ego_car, other_car, diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=1.5, orientation=0.0, time_step=0),
+        1: CustomState(position=[10.0, lane_centres[0]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-0.5)
+
+
+def test_faster_than_left_within_speed():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[1]], velocity=1.5, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[1]], velocity=1.5, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.5)
+
+
+def test_faster_than_left_drive_faster():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[1]], velocity=1.51, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.5, lane_centres[2]], velocity=1.5, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[2]], velocity=1.5, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.01)
+
+
+def test_faster_than_left_blocked():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[1]], velocity=0.05, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.5, lane_centres[2]], velocity=0.0, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[2]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(0.05)
+
+
+def test_faster_than_left_blocked_but_still_too_fast():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[1]], velocity=0.25, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.5, lane_centres[2]], velocity=0.0, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[2]], velocity=0.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-0.15)
+
+
+def test_faster_than_left_access_ramp():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=20.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.5, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.75)
+
+
+def test_consider_entering_ego_in_front():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[10.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[10.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(14)
+
+
+def test_consider_entering_stays_considerate():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.0)
+
+
+def test_consider_entering_already_in_right():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.75)
+
+
+def test_consider_entering_no_access_cars():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.0)
+
+
+def test_consider_entering_never_leaves_access():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.75)
+
+
+def test_consider_entering_ego_not_in_main():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(1.0)
+
+
+def test_consider_entering_inconsiderate_ego():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[0.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[0.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[10.0, lane_centres[1]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    result = stl_rob(e, xs, 0)
+
+    assert result == approx(-1.0)

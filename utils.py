@@ -83,7 +83,7 @@ def ani_scenario_func(scenario: Scenario, ax, ego_v: Optional[DynamicObstacle] =
     return animate
 
 
-def ani_monitor_func(ob_rob_vs, ax):
+def ani_multi_monitor_func(ob_rob_vs, ax):
     ob_lines = {}
     for ob_id, rob_vs in ob_rob_vs.items():
         ob_lines[ob_id] = ax.plot(rob_vs, label=ob_id)[0]
@@ -98,7 +98,17 @@ def ani_monitor_func(ob_rob_vs, ax):
     return animate
 
 
-def animate_monitor(ob_rob_vs: Dict[int, List[float]], fig_ax: Tuple = None, show=False):
+def ani_monitor_func(rob_vs, ax):
+    line = ax.plot(rob_vs)[0]
+
+    def animate(i):
+        line.set_data(range(i), rob_vs[:i])
+        return line
+
+    return animate
+
+
+def animate_multi_monitor(ob_rob_vs: Dict[int, List[float]], fig_ax: Tuple = None, show=False):
     if fig_ax is None:
         fig, ax = plt.subplots(figsize=(25, 3))
     else:
@@ -110,7 +120,7 @@ def animate_monitor(ob_rob_vs: Dict[int, List[float]], fig_ax: Tuple = None, sho
         y_min = min(y_min, np.min(rob_vs) - 0.5)
         y_max = max(y_max, np.max(rob_vs) + 0.5)
 
-    animate = ani_monitor_func(ob_rob_vs, ax)
+    animate = ani_multi_monitor_func(ob_rob_vs, ax)
 
     ax.set_xlim(0, time_steps)
     ax.set_ylim(y_min, y_max)
@@ -124,19 +134,22 @@ def animate_monitor(ob_rob_vs: Dict[int, List[float]], fig_ax: Tuple = None, sho
     return ani
 
 
-def animate_scenario_and_monitor(scenario: Scenario, ob_rob_vs):
+def animate_scenario_and_monitor(scenario: Scenario, rob_vs, save=False):
     fig, axs = plt.subplots(figsize=(25, 6), nrows=2, ncols=1)
-    timesteps = len(list(ob_rob_vs.values())[0])
-    # a0 = animate_scenario(scenario, planning_problem_set, timesteps, figax=(fig, axs[0]))
-    # a1 = animate_monitor(ob_rob_vs, fig_ax=(fig, axs[1]))
+    timesteps = len(rob_vs)
+
     a0 = ani_scenario_func(scenario, axs[0])
-    a1 = ani_monitor_func(ob_rob_vs, axs[1])
+    a1 = ani_monitor_func(rob_vs, axs[1])
 
     def animate(i):
         a0(i)
         a1(i)
 
-    ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=200)
-    ani.save("results/rg_1_monitor.gif", animation.PillowWriter(fps=15))
+    axs[1].set_ylim(min(-1, min(rob_vs) - 1), max(rob_vs) + 1)
+    axs[1].plot(range(len(rob_vs)), np.zeros(len(rob_vs)), linestyle='--', c='r', alpha=0.2)
+
+    ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=300)
+    if save:
+        ani.save("results/rg_1_monitor.gif", animation.PillowWriter(fps=15))
     plt.tight_layout()
     plt.show()

@@ -1,11 +1,14 @@
+from functools import partial
+from itertools import combinations
 from typing import Dict, List, Callable
 
 import commonroad.scenario.state
+import math
 import numpy as np
 from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.state import State, KSState, CustomState
 
-from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H, LEQ, GEQ
+from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H, LEQc, GEQc, LEQ, GEQ, Tru
 
 
 def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
@@ -71,6 +74,47 @@ def in_front_of(car_a: Obstacle, car_b: Obstacle) -> STLExp:
         return a_rear_x - b_front_x
 
     return GEQ0(f)
+
+
+# Is car A to the left of car B
+def left_of(car_a: Obstacle, car_b: Obstacle) -> STLExp:
+    def x(f):
+        return lambda s: f(s)[0]
+
+    def y(f):
+        return lambda s: f(s)[1]
+
+    left_b = y(partial(left, car_b))
+    right_a = y(partial(right, car_a))
+
+    front_a = x(partial(front, car_a))
+    front_b = x(partial(front, car_b))
+
+    rear_a = x(partial(rear, car_a))
+    rear_b = x(partial(rear, car_b))
+
+    # Rear of car_a is in between the front & rear of car_b
+    a_rear_between = And([
+        LEQ(rear_b, rear_a),
+        LEQ(rear_a, front_b)
+    ])
+
+    # Front of car_a is ahead of car_b, and back of car_a is behind_car_b
+    bigger_car = And([
+        LEQ(front_b, front_a),
+        LEQ(rear_a, rear_b)
+    ])
+
+    # Front of car_a is in between the front & rear of car_b
+    a_front_between = And([
+        LEQ(rear_b, front_a),
+        LEQ(front_a, front_b)
+    ])
+
+    return And([
+        LEQ(left_b, right_a),
+        Or([a_rear_between, bigger_car, a_front_between])
+    ])
 
 
 def turning_left(car: Obstacle) -> STLExp:
@@ -156,7 +200,7 @@ def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_cent
             diff = b_acc - f_acc
             return diff
 
-        return LEQ(acc_diff, a_abrupt)
+        return LEQc(acc_diff, a_abrupt)
 
     follow_abruptness = []
     for other_car in other_cars:
@@ -167,10 +211,12 @@ def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_cent
             abrupt_difference(ego_car, other_car)
         ]))
 
-    return Or([
-        And([nothing_up_front, LEQ(ego_acc, a_abrupt)]),
+    abruptness = Or([
+        And([nothing_up_front, LEQc(ego_acc, a_abrupt)]),
         Or(follow_abruptness)
     ])
+
+    return And([LEQ0(ego_acc), abruptness])
 
 
 # def keeps_lane_speed_limit() -> float:
@@ -200,7 +246,7 @@ def slow_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle], lane_cen
     slow_lvs = []
     for other_car in other_cars:
         slow_lvs.append(And([
-            LEQ(car_v(other_car), speed_limit - slow_delta),
+            LEQc(car_v(other_car), speed_limit - slow_delta),
             in_same_lane(ego_car, other_car, lane_centres, lane_widths),
             in_front_of(other_car, ego_car)
         ]))
@@ -208,14 +254,43 @@ def slow_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle], lane_cen
 
 
 def preserves_flow(car: Obstacle, speed_limit: float, slow_delta: float) -> STLExp:
-    return GEQ(car_v(car), speed_limit - slow_delta)
+    return GEQc(car_v(car), speed_limit - slow_delta)
 
 
-def in_congestion() -> STLExp:
-    return 0.0
+def in_congestion(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
+                  congestion_vel: float, congestion_size: int) -> STLExp:
+    assert congestion_size > 0
+
+    # Congestion is impossible if there are less total cars than congestion threshold
+    if congestion_size > len(other_cars):
+        return Neg(Tru())
+
+    con_contrib = []
+    for other_car in other_cars:
+        con_contrib.append(And([
+            in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+            in_front_of(other_car, ego_car),
+            LEQc(car_v(other_car), congestion_vel)
+        ]))
+
+    congestion_combs = list(combinations(con_contrib, congestion_size))
+    assert len(congestion_combs) == math.comb(len(other_cars), congestion_size)
+
+    return Or([And(list(cong_comb)) for cong_comb in congestion_combs])
 
 
-def exist_standing_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float, error_bound: float) -> STLExp:
+def in_slow_moving_traffic(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
+                           slow_traff_vel: float, traffic_size: int) -> STLExp:
+    return in_congestion(ego_car, other_cars, lane_centres, lane_widths, slow_traff_vel, traffic_size)
+
+
+def in_vehicle_queue(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
+                     queue_vel: float, queue_size: int) -> STLExp:
+    return in_congestion(ego_car, other_cars, lane_centres, lane_widths, queue_vel, queue_size)
+
+
+def exist_standing_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float],
+                                   lane_widths: float, error_bound: float) -> STLExp:
     standing_leads = []
     for other_car in other_cars:
         standing_leads.append(And([
@@ -229,47 +304,42 @@ def exist_standing_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle]
 def in_standstill(car: Obstacle, error_bound: float) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
         return abs(s[car.obstacle_id].velocity)
-    return LEQ(f, error_bound)
+
+    return LEQc(f, error_bound)
 
 
-def left_of() -> float:
-    return 0.0
+def drives_faster(car_a: Obstacle, car_b: Obstacle) -> STLExp:
+    return GEQ(car_v(car_a), car_v(car_b))
 
 
-def drives_faster() -> float:
-    return 0.0
+def slightly_higher_speed(car_a: Obstacle, car_b: Obstacle, diff_thresh: float):
+    def f(s: Dict[int, KSState]) -> float:
+        return s[car_a.obstacle_id].velocity - s[car_b.obstacle_id].velocity
+
+    return And([
+        GEQ0(f),
+        LEQc(f, diff_thresh)
+    ])
 
 
-def in_vehicle_queue():
-    return
+# def left_of_broad_marking():
+#     return
+#
+#
+# def right_of_broad_marking():
+#     return
 
 
-def in_slow_moving_traffic():
-    return
+def on_access_ramp(car: Obstacle, access_cs: List[float], lane_widths: float) -> STLExp:
+    return on_main_carriageway(car, access_cs, lane_widths)
 
 
-def slightly_higher_speed():
-    return
+def on_main_carriageway(car: Obstacle, main_cw_cs: List[float], lane_widths: float) -> STLExp:
+    return Or([in_lane(car, l, lane_widths) for l in main_cw_cs])
 
 
-def left_of_broad_marking():
-    return
-
-
-def right_of_broad_marking():
-    return
-
-
-def on_access_ramp():
-    return
-
-
-def on_main_carriageway():
-    return
-
-
-def main_carriageway_right_lane():
-    return
+# def main_carriageway_right_lane():
+#     return
 
 
 def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[float], lane_widths: float,
@@ -286,7 +356,8 @@ def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[fl
     return G(Implies(lhs, rhs), 0, 1000)
 
 
-def no_unnecessary_braking_rule(ego_car: Obstacle, other_cars: Obstacle, lane_centres: List[float], lane_widths: float,
+def no_unnecessary_braking_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float],
+                                lane_widths: float,
                                 a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
     return G(Neg(unnecessary_braking(ego_car, other_cars, lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)),
              0, 1000)
@@ -296,7 +367,7 @@ def keeps_speed_limit_rule(ego_car: Obstacle, max_vel: float) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
         return s[ego_car.obstacle_id].velocity
 
-    return G(LEQ(f, max_vel), 0, 1000)
+    return G(LEQc(f, max_vel), 0, 1000)
 
 
 def traffic_flow_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres, lane_widths, speed_limit: float,
@@ -311,11 +382,76 @@ def interstate_stopping_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane
         Neg(in_standstill(ego_car, error_bound))), 0, 1000)
 
 
+def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float], access_cs: List[float],
+                          lane_widths: float, congestion_vel: float, congestion_size: int, queue_vel: float,
+                          queue_size: int, slow_traff_vel: float, traffic_size: int, diff_thresh: float) -> STLExp:
+    lane_centres = [*main_cw_cs, *access_cs]
+    faster_left_cars = []
+    for other_car in other_cars:
+        lhs = And([left_of(other_car, ego_car), drives_faster(ego_car, other_car)])
+        remaining_cars = [o for o in other_cars if o != other_car]
+        blocked = Or([
+            in_congestion(other_car, remaining_cars, lane_centres, lane_widths, congestion_vel, congestion_size),
+            in_vehicle_queue(other_car, remaining_cars, lane_centres, lane_widths, queue_vel, queue_size),
+            in_slow_moving_traffic(other_car, remaining_cars, lane_centres, lane_widths, slow_traff_vel, traffic_size)
+        ])
+        faster_than_blocked = And([blocked, slightly_higher_speed(ego_car, other_car, diff_thresh)])
+
+        access_ramp_exempt = And([
+            on_access_ramp(ego_car, access_cs, lane_widths),
+            on_main_carriageway(other_car, main_cw_cs, lane_widths),
+            Neg(blocked)
+        ])
+        faster_left_cars.append(Implies(lhs, Or([faster_than_blocked, access_ramp_exempt])))
+
+    return G(And(faster_left_cars), 0, 1000)
+
+
+# def consider_entering_vehicles_rule_old(ego_car: Obstacle, other_cars: List[Obstacle], main_cw_cs: List[float],
+#                                     access_cs: List[float], lane_widths: float):
+#     access_considerations = []
+#     for other_car in other_cars:
+#         lhs = And([
+#             on_main_carriageway(ego_car, main_cw_cs, lane_widths),
+#             in_front_of(other_car, ego_car),
+#             on_access_ramp(other_car, access_cs, lane_widths),
+#             F(on_main_carriageway(other_car, main_cw_cs, lane_widths), 0, 1000)])
+#
+#         rhs = Neg(And([
+#             Neg(in_lane(ego_car, min(main_cw_cs), lane_widths)),
+#             F(in_lane(ego_car, min(main_cw_cs), lane_widths), 1, 1000)
+#         ]))
+#
+#         access_considerations.append(Implies(lhs, rhs))
+#     return G(And(access_considerations), 0, 1000)
+
+
+def consider_entering_vehicles_rule(ego_car: Obstacle, other_cars: List[Obstacle], main_cw_cs: List[float],
+                                    access_cs: List[float], lane_widths: float):
+    access_considerations = []
+    rh_lane = min(main_cw_cs)
+    for other_car in other_cars:
+        lhs = And([
+            on_main_carriageway(ego_car, main_cw_cs, lane_widths),
+            Neg(in_lane(ego_car, rh_lane, lane_widths)),
+            in_front_of(other_car, ego_car),
+            on_access_ramp(other_car, access_cs, lane_widths),
+            F(And([on_main_carriageway(other_car, main_cw_cs, lane_widths),
+                    Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, 1000)
+            ])
+
+        rhs = U(Neg(in_lane(ego_car, rh_lane, lane_widths)),
+                And([
+                    on_main_carriageway(other_car, main_cw_cs, lane_widths),
+                    Neg(on_access_ramp(other_car, access_cs, lane_widths))
+                ]), 0, 1000)
+
+        access_considerations.append(Implies(lhs, rhs))
+    return G(And(access_considerations), 0, 1000)
+
+
 def run():
-    ri_1 = None
-    ri_2 = None
-    ri_4 = None
-    ri_5 = None
+    pass
 
 
 if __name__ == "__main__":
