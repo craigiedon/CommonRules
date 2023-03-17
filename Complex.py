@@ -40,7 +40,7 @@ def run():
 
     start_state = InitialState(position=np.array([10.0, lane_centres[0]]), velocity=0.0, orientation=0, time_step=0)
 
-    cws = CostWeights(x_prog=0.0001, y_prog=0.01, jerk=5, v_track=30, lane_align=1, collision_pot=200, faster_left=200)
+    cws = CostWeights(x_prog=0.01, y_prog=0.1, jerk=50, v_track=30, lane_align=1, road_align=10, collision_pot=200, faster_left=500, braking=100)
 
     dn_state_list = receding_horizon(end_time, 1.0, start_state, scenario, task_config, cws)
 
@@ -55,6 +55,9 @@ def run():
                               dyn_obs_pred)
 
     scenario.add_objects(dyn_obs)
+
+    plt.plot([s.acceleration for s in dn_state_list])
+    plt.show()
 
     animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt),
                      ego_v=dyn_obs, show=True)  # , save_path="complexAnim.gif")

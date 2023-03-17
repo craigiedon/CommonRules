@@ -48,6 +48,7 @@ class CostWeights:
     lane_align: float = 1
     collision_pot: float = 1
     faster_left: float = 1
+    braking: float = 1
 
 
 # @dataclass
@@ -123,6 +124,9 @@ def to_numpy_polys(x: float, y: float, w: float, h: float, rot: float) -> PolyCo
 def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig,
             static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle],
             cw: Optional[CostWeights] = None, prev_solve: CarMPCRes = None) -> CarMPCRes:
+    # print(start_state.position)
+    # print(start_state.velocity)
+    # print(start_state.acceleration)
     opti = casadi.Opti()
     start_step = int(np.round(start_time / task.dt))
     end_step = int(np.round(end_time / task.dt))
@@ -135,22 +139,27 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     accs = opti.variable(T)
     ang_vels = opti.variable(T)
     lane_selectors = opti.variable(T, len(task.lanes))
-
     lane_params = opti.parameter(len(task.lanes))
     opti.set_value(lane_params, task.lanes)
 
     # 4 bs per rectangle (ego + 1st static obstacle 8 == 4 * 2)
     # collision_slacks = opti.variable(T, 8 * len(static_obstacles) + 8 * len(dynamic_obstacles))
 
+    x_span = max(1.0, abs(task.x_goal - start_state.position[0]))
+    y_span = max(1.0, abs(task.y_goal - start_state.position[1]))
+
     # Distance to destination cost
-    x_progress_cost = casadi.sumsqr((xs - task.x_goal))  # / (start_state.x - task.x_goal))
-    y_progress_cost = casadi.sumsqr((ys - task.y_goal))  # / (start_state.y - task.y_goal))
+    x_progress_cost = casadi.sumsqr((xs - task.x_goal) / x_span)  # / (start_state.x - task.x_goal))
+    y_progress_cost = casadi.sumsqr((ys - task.y_goal) / y_span)  # / (start_state.y - task.y_goal))
 
     # Track the reference velocity
     vel_track_cost = casadi.sumsqr(vs - task.v_goal * task.dt)
 
-    # Keep velocity low
+    # Keep acceleration low
     acc_cost = casadi.sumsqr(accs)
+
+    # Penalize braking
+    braking_cost = casadi.sumsqr(casadi.fmin(0.0, accs))
 
     # Keep angular velocity low
     ang_vel_cost = casadi.sumsqr(ang_vels)
@@ -219,10 +228,14 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
             d_ys = np.array([ds.position[1] for ds in d_states])
             d_vs = np.array([ds.velocity for ds in d_states])
 
-            left_flag = casadi.lt(ys + task.car_height / 2.0, d_ys - d_obs.obstacle_shape.width / 2.0)
-            x_flag = casadi.lt(casadi.fabs(xs - d_xs), (task.car_width + d_obs.obstacle_shape.length) / 2.0 + 10)
+            d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2.0
+            x_pot = 10 * casadi.exp(-d_dist_x)
+
+            d_dist_y = casadi.fmax(0.0, (d_ys + d_obs.obstacle_shape.width / 2.0) - (ys - task.car_height / 2.0))
+            # d_dist_y = casadi.fmin(d_dist_y, 1.0)
+
             vel_diffs = casadi.fmax(vs - d_vs, 0.0)
-            f_left_costs.append(left_flag * x_flag * vel_diffs)
+            f_left_costs.append(casadi.fmin(d_dist_y, x_pot) * vel_diffs)
         f_lefts_combined = casadi.vcat(f_left_costs)
         f_left_cost = casadi.sumsqr(f_lefts_combined)
     else:
@@ -241,7 +254,8 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
                   cw.lane_align * lane_align_cost +
                   cw.collision_pot * s_obs_cost +
                   cw.collision_pot * d_obs_cost +
-                  cw.faster_left * f_left_cost
+                  cw.faster_left * f_left_cost +
+                  cw.braking * braking_cost
                   )
 
     # Start State Constraints
@@ -271,7 +285,8 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     # Lane Selection Simplex
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
-    opti.solver('ipopt', {"ipopt.print_level": 0})
+    # opti.solver('ipopt', {"ipopt.print_level": 0, "ipopt.max_iter": 10000})
+    opti.solver('ipopt', {"ipopt.check_derivatives_for_naninf": "yes", "ipopt.max_iter": 10000})
 
     if prev_solve is not None:
         opti.set_initial(xs, prev_solve.xs)
@@ -281,7 +296,17 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
         opti.set_initial(accs, prev_solve.accs)
         opti.set_initial(ang_vels, prev_solve.ang_vels)
 
-    sol = opti.solve()
+    try:
+        sol = opti.solve()
+    except RuntimeError as e:
+        print("Uh oh! An error...")
+        print("xs:", opti.debug.value(xs))
+        print("ys:", opti.debug.value(ys))
+        print("vs:", opti.debug.value(vs))
+        print("hs:", opti.debug.value(hs))
+        print("accs:", opti.debug.value(accs))
+        print("ang_vels:", opti.debug.value(ang_vels))
+        raise e
 
     res = CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
 
@@ -328,8 +353,10 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
     current_state = start_state
 
     for i in range(1, T):
+        flat_costs = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
+                             scenario.static_obstacles, scenario.dynamic_obstacles, None)
         res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
-                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, res)
+                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, flat_costs)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)
