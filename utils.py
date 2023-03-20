@@ -32,7 +32,7 @@ def animate_scenario_old(scenario: Scenario, planning_problem_set, timesteps: in
     plt.show()
 
 
-def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, ego_v: Optional[DynamicObstacle] = None,
+def animate_scenario(scenario: Scenario, timesteps: int, ego_v: Optional[DynamicObstacle] = None,
                      save_path=None, show=False, figax=None):
     if figax is None:
         fig, ax = plt.subplots(figsize=(25, 3))
@@ -40,8 +40,6 @@ def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, e
         fig, ax = figax
 
     rnd = MPRenderer(ax=ax)
-    dps = rnd.draw_params
-    is_s = rnd.draw_params["planning_problem"]["initial_state"]["state"]
     rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
     rnd.draw_params.dynamic_obstacle.show_label = True
 
@@ -53,9 +51,7 @@ def animate_scenario(scenario: Scenario, planning_problem_set, timesteps: int, e
             ego_dp = copy.deepcopy(rnd.draw_params)
             ego_dp.dynamic_obstacle.vehicle_shape.occupancy.shape.facecolor = 'g'
             ego_v.draw(rnd, draw_params=ego_dp)
-        # planning_problem_set.draw(rnd)
         rnd.render()
-        # rnd.ax.scatter([5], [1.75], c='b', zorder=100)
 
     ani = FuncAnimation(fig, animate, frames=timesteps, interval=32, repeat=True, repeat_delay=200)
     if save_path is not None:
