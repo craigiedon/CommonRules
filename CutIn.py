@@ -45,7 +45,7 @@ def run():
     start_time = 0.0
     end_time = 8.0
     res = car_mpc(start_time, end_time, start_state, task_config, [], [],
-                  CostWeights(x_prog=0.0001, y_prog=1.0, v_track=20, acc=500, ang_v=1, jerk=0, road_align=1,
+                  CostWeights(x_prog=0.0001, y_prog=1.0, v_track=20, acc=50, ang_v=1, road_align=1,
                               lane_align=5))
 
     dyn_v = 31.29
@@ -70,7 +70,7 @@ def run():
     scenario.add_objects(dyn_obs)
     scenario.add_objects(static_obs)
 
-    animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt), show=True)  # save_path="cutInAnim.gif")
+    animate_scenario(scenario, int(end_time / task_config.dt), show=True)  # save_path="cutInAnim.gif")
     # print(res)
 
     scenario_save_path = "scenarios/CutIn.xml"

@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.visualization.mp_renderer import MPRenderer
+from matplotlib import animation
 from matplotlib.animation import FuncAnimation
 
 from immFilter import measure_from_state, c_acc_long_model, DiagFilterConfig, lat_model, target_state_prediction, \
-    imm_batch, sticky_m_trans, unif_cat_prior, c_vel_long_model
+    imm_batch, sticky_m_trans, unif_cat_prior, c_vel_long_model, closest_lane_prior, all_model_predictions
 from trafficRules import rot_mat
 
 file_path = "scenarios/Complex_Solution.xml"
@@ -28,8 +29,9 @@ lane_centres = [-1.75, 1.75, 5.25]
 
 # Lat Simulation
 lat_models = [
-    lat_model(dt, kd, 4.0, p_ref, 1.0, 0.1) for kd in
-    np.linspace(3.0, 5.0, 3)
+    lat_model(dt, kd, 7, p_ref, 0.1, 0.1)
+    for kd in np.linspace(3.0, 5.0, 3)
+    # for kp in np.linspace(4, 9, 3)
     for p_ref in lane_centres]
 
 # Convert to kalman filter format? (long_pos, x_long_vel, long_acc)
@@ -53,7 +55,6 @@ for sd in state_dict_traj:
         long_vel, lat_vel = r @ np.array([s.velocity, 0.0])
         long_acc, _ = r @ np.array([s.acceleration, 0.0])
 
-        # TODO: There is going to be a problem here with time-step granularities (are velocities in m/s? Or relative to current dt?)
         long_state = np.array([long_pos, long_vel, long_acc])
         lat_state = np.array([lat_pos, lat_vel])
 
@@ -82,15 +83,14 @@ for obs in scenario.obstacles:
     z_longs = np.array([sd[obs.obstacle_id] for sd in zs_long_dict_traj])
     z_lats = np.array([sd[obs.obstacle_id] for sd in zs_lat_dict_traj])
 
-    # TODO: This probably wont work because of the dt Timesteps thing!
-    imm_long_stats[obs.obstacle_id] = imm_batch(long_models, np.array([[0.5, 0.5], [0.5, 0.5]]),
-                                                np.array([0.5, 0.5]),
+    imm_long_stats[obs.obstacle_id] = imm_batch(long_models, sticky_m_trans(len(long_models), 0.95),
+                                                unif_cat_prior(len(long_models)),
                                                 np.tile(x_longs[0], (len(long_models), 1)),
                                                 np.tile(np.identity(3), (len(long_models), 1, 1)), z_longs)
 
     imm_lat_stats[obs.obstacle_id] = imm_batch(lat_models,
                                                sticky_m_trans(len(lat_models), 0.95),
-                                               unif_cat_prior(len(lat_models)),
+                                               closest_lane_prior(x_lats[0, 0], lat_models, 0.9),
                                                np.tile(x_lats[0], (len(lat_models), 1)),
                                                np.tile(np.identity(len(x_lats[0])), (len(lat_models), 1, 1)), z_lats)
 
@@ -120,6 +120,7 @@ def animate(i):
         lat_mus, lat_covs, mps_lat = imm_lat_stats[obs.obstacle_id]
 
         x_lat_predictions = target_state_prediction(lat_mus[i], lat_models, mps_lat[i], prediction_steps)
+        x_lat_preds_all = all_model_predictions(lat_mus[i], lat_models, prediction_steps)
 
         z_longs = np.array([sd[obs.obstacle_id] for sd in zs_long_dict_traj])
         z_lats = np.array([sd[obs.obstacle_id] for sd in zs_lat_dict_traj])
@@ -130,11 +131,14 @@ def animate(i):
         # ax.plot(x_longs[:i, 0], x_lats[:i, 0], zorder=100)
         # ax.scatter(z_longs[:i, 0], z_lats[:i, 0], zorder=100, s=25, marker='x', alpha=1.0)
 
-        # ax.plot(x_long_predictions[:, 0], x_lat_predictions[:, 0], color='purple', alpha=0.8, zorder=1000)
+        ax.plot(x_long_predictions[:, 0], x_lat_predictions[:, 0], color='purple', alpha=0.5, zorder=1000)
+        # for mod_pred in x_lat_preds_all:
+        #     ax.plot(x_long_predictions[:, 0], mod_pred[:, 0], color='purple', alpha=0.6, zorder=1000)
         ax.scatter(long_mus[i, 0], lat_mus[i, 0], color='purple', zorder=1000)
 
 
 ani = FuncAnimation(fig, animate, frames=T, interval=32, repeat=True, repeat_delay=200)
+ani.save("kalmanPredictions.gif", animation.PillowWriter(fps=3))
 
 plt.tight_layout()
 plt.show()

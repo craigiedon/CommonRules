@@ -39,7 +39,7 @@ def run():
 
     start_time = 0.0
     end_time = 8.0
-    res = car_mpc(start_time, end_time, start_state, task_config, [], [], CostWeights(x_prog=0.0001, y_prog=0.0, v_track=20, acc=5, lane_align=5))
+    res = car_mpc(start_time, end_time, start_state, task_config, scenario.static_obstacles, scenario.dynamic_obstacles, CostWeights(x_prog=0.0001, y_prog=0.0, v_track=20, acc=5, lane_align=5, collision_pot=1000))
 
     dyn_obs_shape = Rectangle(width=1.674, length=4.298)
 
@@ -56,7 +56,7 @@ def run():
 
     scenario.add_objects(dyn_obs)
 
-    animate_scenario(scenario, planning_problem_set, int(end_time / task_config.dt), show=True) #save_path="cutInAnim.gif")
+    animate_scenario(scenario, int(end_time / task_config.dt), show=True) #save_path="cutInAnim.gif")
 
     scenario_save_path = "scenarios/Complex.xml"
     fw = CommonRoadFileWriter(scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")

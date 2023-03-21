@@ -25,6 +25,7 @@ class AffineModel:
 class StateFeedbackModel(AffineModel):
     k_p: float
     k_d: float
+    p_ref: float
 
 
 @dataclass
@@ -85,7 +86,8 @@ def lat_model(ts: float, k_d: float, k_p: float, p_ref: float, q_p: float, q_m: 
         H=np.array([[1.0, 0.0]]),
         measure_noise_cov=np.identity(1) * q_m,
         k_p=k_p,
-        k_d=k_d
+        k_d=k_d,
+        p_ref=p_ref
     )
 
 
@@ -251,6 +253,19 @@ def target_state_prediction(x_est: np.ndarray, models: List[AffineModel], model_
     return predictions
 
 
+def all_model_predictions(x_est: np.ndarray, models: List[AffineModel], prediction_steps: int) -> List[np.ndarray]:
+    model_preds = []
+    for model in models:
+        x_current = x_est
+        predictions = []
+        for i in range(prediction_steps):
+            x_current = update_sim_noiseless(x_current, model)
+            predictions.append(x_current)
+        model_preds.append(np.array(predictions))
+
+    return model_preds
+
+
 def measurements_from_traj(xs: np.ndarray, sim_model: AffineModel) -> np.ndarray:
     return np.array([measure_from_state(x, sim_model) for x in xs])
 
@@ -280,6 +295,19 @@ def sticky_m_trans(m: int, stick_prob: float) -> np.ndarray:
 
 def unif_cat_prior(m: int) -> np.ndarray:
     return np.full(m, 1.0 / m)
+
+
+def closest_lane_prior(lat_start: float, lat_models: List[StateFeedbackModel], match_val: float) -> np.ndarray:
+    assert 0.0 < match_val < 1.0
+
+    lat_prior = []
+    for lm in lat_models:
+        if np.abs(lm.p_ref - lat_start) < 0.05:
+            lat_prior.append(match_val)
+        else:
+            lat_prior.append(1.0 - match_val)
+    lat_prior = np.array(lat_prior) / np.sum(lat_prior)
+    return lat_prior
 
 
 def imm_batch(models: List[AffineModel], m_trans: np.ndarray, m_prior: np.ndarray, mu_prior: np.ndarray,

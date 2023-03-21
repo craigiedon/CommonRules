@@ -30,18 +30,18 @@ main_cw_cs = lane_centres[1:]
 access_cs = lane_centres[:1]
 lane_widths = 3.5
 
-max_vel = 36.6 * dt
-slow_delta = 15.0 * dt
-a_abrupt = -2.0 * dt
-stop_err_bound = 0.01 * dt
+max_vel = 36.6
+slow_delta = 15.0
+a_abrupt = -2.0
+stop_err_bound = 0.01
 
 
 congestion_size = queue_size = traffic_size = 3
-congestion_vel = 2.78 * dt
-slow_traff_vel = 8.33 * dt
-queue_vel = 16.67 * dt
+congestion_vel = 2.78
+slow_traff_vel = 8.33
+queue_vel = 16.67
 
-faster_diff_thresh = 5.55 * dt
+faster_diff_thresh = 5.55
 
 
 # TODO: Redo this as a combined rule?

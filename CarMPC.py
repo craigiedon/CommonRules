@@ -124,9 +124,6 @@ def to_numpy_polys(x: float, y: float, w: float, h: float, rot: float) -> PolyCo
 def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig,
             static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle],
             cw: Optional[CostWeights] = None, prev_solve: CarMPCRes = None) -> CarMPCRes:
-    # print(start_state.position)
-    # print(start_state.velocity)
-    # print(start_state.acceleration)
     opti = casadi.Opti()
     start_step = int(np.round(start_time / task.dt))
     end_step = int(np.round(end_time / task.dt))
@@ -142,9 +139,6 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     lane_params = opti.parameter(len(task.lanes))
     opti.set_value(lane_params, task.lanes)
 
-    # 4 bs per rectangle (ego + 1st static obstacle 8 == 4 * 2)
-    # collision_slacks = opti.variable(T, 8 * len(static_obstacles) + 8 * len(dynamic_obstacles))
-
     x_span = max(1.0, abs(task.x_goal - start_state.position[0]))
     y_span = max(1.0, abs(task.y_goal - start_state.position[1]))
 
@@ -153,7 +147,7 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     y_progress_cost = casadi.sumsqr((ys - task.y_goal) / y_span)  # / (start_state.y - task.y_goal))
 
     # Track the reference velocity
-    vel_track_cost = casadi.sumsqr(vs - task.v_goal * task.dt)
+    vel_track_cost = casadi.sumsqr(vs - task.v_goal)
 
     # Keep acceleration low
     acc_cost = casadi.sumsqr(accs)
@@ -266,10 +260,10 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     opti.subject_to(hs[0] == start_state.orientation)
 
     # Variable Bounds
-    opti.subject_to(opti.bounded(-task.v_max * task.dt, casadi.vec(vs), task.v_max * task.dt))
+    opti.subject_to(opti.bounded(-task.v_max, casadi.vec(vs), task.v_max))
     opti.subject_to(opti.bounded(-casadi.pi / 2.0, casadi.vec(hs), casadi.pi / 2.0))
-    opti.subject_to(opti.bounded(-task.acc_max * task.dt, casadi.vec(accs), task.acc_max * task.dt))
-    opti.subject_to(opti.bounded(-task.ang_vel_max * task.dt, casadi.vec(ang_vels), task.ang_vel_max * task.dt))
+    opti.subject_to(opti.bounded(-task.acc_max, casadi.vec(accs), task.acc_max))
+    opti.subject_to(opti.bounded(-task.ang_vel_max, casadi.vec(ang_vels), task.ang_vel_max))
     opti.subject_to(opti.bounded(0, casadi.vec(lane_selectors), 1))
 
     # Lane Bounds
@@ -277,10 +271,10 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
                                  task.y_bounds[1] - task.car_height / 2.0))
 
     # State Evolution
-    opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1])
-    opti.subject_to(ys[1:] == ys[:-1] + casadi.sin(hs[:-1]) * vs[:-1])
-    opti.subject_to(vs[1:] == vs[:-1] + accs[:-1])
-    opti.subject_to(hs[1:] == hs[:-1] + ang_vels[:-1])
+    opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1] * task.dt)
+    opti.subject_to(ys[1:] == ys[:-1] + casadi.sin(hs[:-1]) * vs[:-1] * task.dt)
+    opti.subject_to(vs[1:] == vs[:-1] + accs[:-1] * task.dt)
+    opti.subject_to(hs[1:] == hs[:-1] + ang_vels[:-1] * task.dt)
 
     # Lane Selection Simplex
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
@@ -347,6 +341,26 @@ def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectOb
 
 def receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
                      task_config: TaskConfig, cws: CostWeights) -> List[State]:
+    T = int(np.round(total_time / task_config.dt))
+    res = None
+    dn_state_list = []
+    current_state = start_state
+
+    for i in range(1, T):
+        flat_costs = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
+                             scenario.static_obstacles, scenario.dynamic_obstacles, None)
+        res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
+                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, flat_costs)
+        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
+                                    orientation=res.hs[1],
+                                    acceleration=res.accs[1], time_step=i)
+        dn_state_list.append(current_state)
+
+    return dn_state_list
+
+
+def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
+                     task_config: TaskConfig, cws: CostWeights):
     T = int(np.round(total_time / task_config.dt))
     res = None
     dn_state_list = []
