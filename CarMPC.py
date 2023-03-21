@@ -1,15 +1,18 @@
 from dataclasses import dataclass
-from typing import List, Any, Tuple, Optional
+from typing import List, Any, Tuple, Optional, Dict
 import matplotlib.pyplot as plt
 import numpy as np
 
 import casadi
-from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle
+from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle, Obstacle
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
+
+from immFilter import target_state_prediction, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
+    measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult
 
 
 @dataclass
@@ -121,13 +124,10 @@ def to_numpy_polys(x: float, y: float, w: float, h: float, rot: float) -> PolyCo
     return PolyConstraint(A=A, b=b)
 
 
-def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskConfig,
-            static_obstacles: List[StaticObstacle], dynamic_obstacles: List[DynamicObstacle],
+def car_mpc(T: int, start_state: State, task: TaskConfig,
+            obstacles: List[Obstacle], obs_pred_longs: Dict[int, np.ndarray], obs_pred_lats: Dict[int, np.ndarray],
             cw: Optional[CostWeights] = None, prev_solve: CarMPCRes = None) -> CarMPCRes:
     opti = casadi.Opti()
-    start_step = int(np.round(start_time / task.dt))
-    end_step = int(np.round(end_time / task.dt))
-    T = end_step - start_step
 
     xs = opti.variable(T)
     ys = opti.variable(T)
@@ -176,57 +176,37 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
     lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
 
     # Obstacle Avoidance (Potential Fields)
-    lateral_slack = 0.9
-    if len(static_obstacles) > 0:
-        s_pots = []
-        for s_obs in static_obstacles:
-            s_x, s_y = s_obs.initial_state.position
-            s_dist_x = ((xs - s_x) / s_obs.obstacle_shape.length) ** 2
-            s_dist_y = ((ys - s_y) / (s_obs.obstacle_shape.width * lateral_slack)) ** 2
-            s_pots.append(casadi.exp(-task.collision_field_slope * (s_dist_x + s_dist_y)))
-        s_pots = casadi.vcat(s_pots)
-        s_obs_cost = casadi.sum2(casadi.sum1(s_pots))
-    else:
-        s_obs_cost = 0.0
-
-    if len(dynamic_obstacles) > 0:
+    lateral_slack = 0.1
+    if len(obstacles) > 0:
         d_pots = []
-        for d_obs in dynamic_obstacles:
-            if start_step == 0:
-                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1,
-                                                                                                       end_step - 1)
-            else:
-                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step - 1)
+        for obs in obstacles:
+            d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
+            d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
 
-            d_xs = np.array([ds.position[0] for ds in d_states])
-            d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2
+            d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2
+            d_dist_y = ((ys - d_ys) / (obs.obstacle_shape.width + lateral_slack)) ** 2
 
-            d_ys = np.array([ds.position[1] for ds in d_states])
-            d_dist_y = ((ys - d_ys) / (d_obs.obstacle_shape.width * lateral_slack)) ** 2
             d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
         d_pots = casadi.vcat(d_pots)
-        d_obs_cost = casadi.sum2(casadi.sum1(d_pots))
+        obs_cost = casadi.sum2(casadi.sum1(d_pots))
     else:
-        d_obs_cost = 0.0
+        obs_cost = 0.0
 
-    if len(dynamic_obstacles) > 0:
+    # No moving faster than left traffic
+    if len(obstacles) > 0:
         f_left_costs = []
-        for d_obs in dynamic_obstacles:
-            if start_step == 0:
-                d_states = [d_obs.initial_state] + d_obs.prediction.trajectory.states_in_time_interval(start_step + 1,
-                                                                                                       end_step - 1)
-            else:
-                d_states = d_obs.prediction.trajectory.states_in_time_interval(start_step, end_step - 1)
+        for obs in obstacles:
+            d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
+            d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
 
-            d_xs = np.array([ds.position[0] for ds in d_states])
-            d_ys = np.array([ds.position[1] for ds in d_states])
-            d_vs = np.array([ds.velocity for ds in d_states])
+            d_x_vs = obs_pred_longs[obs.obstacle_id][:, 1]
+            d_y_vs = obs_pred_lats[obs.obstacle_id][:, 1]
+            d_vs = np.sqrt((d_x_vs ** 2) + (d_y_vs ** 2))
 
-            d_dist_x = ((xs - d_xs) / d_obs.obstacle_shape.length) ** 2.0
+            d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2.0
             x_pot = 10 * casadi.exp(-d_dist_x)
 
-            d_dist_y = casadi.fmax(0.0, (d_ys + d_obs.obstacle_shape.width / 2.0) - (ys - task.car_height / 2.0))
-            # d_dist_y = casadi.fmin(d_dist_y, 1.0)
+            d_dist_y = casadi.fmax(0.0, (d_ys + obs.obstacle_shape.width / 2.0) - (ys - task.car_height / 2.0))
 
             vel_diffs = casadi.fmax(vs - d_vs, 0.0)
             f_left_costs.append(casadi.fmin(d_dist_y, x_pot) * vel_diffs)
@@ -246,8 +226,7 @@ def car_mpc(start_time: float, end_time: float, start_state: State, task: TaskCo
                   cw.jerk * jerk_cost +
                   cw.road_align * road_align_cost +
                   cw.lane_align * lane_align_cost +
-                  cw.collision_pot * s_obs_cost +
-                  cw.collision_pot * d_obs_cost +
+                  cw.collision_pot * obs_cost +
                   cw.faster_left * f_left_cost +
                   cw.braking * braking_cost
                   )
@@ -347,10 +326,13 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
     current_state = start_state
 
     for i in range(1, T):
-        flat_costs = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
-                             scenario.static_obstacles, scenario.dynamic_obstacles, None)
-        res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
-                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, flat_costs)
+        obs_pred_longs, obs_pred_lats = obs_long_lats(scenario.obstacles, i,
+                                                      i + int(round(horizon_length / task_config.dt)))
+
+        flat_cost = car_mpc(int(round(horizon_length / task_config.dt)), current_state, task_config,
+                            scenario.obstacles, obs_pred_longs, obs_pred_lats, None, None)
+        res = car_mpc(int(round(horizon_length / task_config.dt)), current_state, task_config,
+                      scenario.obstacles, obs_pred_longs, obs_pred_lats, cws, flat_cost)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)
@@ -359,21 +341,109 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
     return dn_state_list
 
 
+def obs_long_lats(obstacles: List[Obstacle], start_step: int, end_step: int) -> Tuple[
+    Dict[int, np.ndarray], Dict[int, np.ndarray]]:
+    # Retrofitting conversion for kalman format
+    obs_pred_longs = {}
+    obs_pred_lats = {}
+
+    for obs in obstacles:
+        ob_long, ob_lat = long_lat_from_states(obs, start_step, end_step)
+        obs_pred_longs[obs.obstacle_id] = ob_long
+        obs_pred_lats[obs.obstacle_id] = ob_lat
+
+    return obs_pred_longs, obs_pred_lats
+
+
+def long_lat_from_states(obs: Obstacle, start_step: int, end_step: int):
+    ob_states = [obs.state_at_time(i) for i in range(start_step, end_step)]
+    ob_xs = np.array([s.position[0] for s in ob_states])
+    ob_ys = np.array([s.position[1] for s in ob_states])
+    ob_vs = np.array([s.velocity for s in ob_states])
+    ob_accs = np.array([s.acceleration for s in ob_states])
+    ob_r = np.array([s.orientation for s in ob_states])
+
+    ob_x_vs = ob_vs * np.cos(ob_r)
+    ob_y_vs = ob_vs * np.sin(ob_r)
+
+    ob_x_accs = ob_accs * np.cos(ob_r)
+
+    ob_long_state = np.stack((ob_xs, ob_x_vs, ob_x_accs), 1)
+    ob_lat_state = np.stack((ob_ys, ob_y_vs), 1)
+
+    assert ob_long_state.shape == (end_step - start_step, 3)
+    assert ob_lat_state.shape == (end_step - start_step, 2)
+
+    # Some polar coordinate magic here to get out the
+    return ob_long_state, ob_lat_state
+
+
 def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
-                     task_config: TaskConfig, cws: CostWeights):
+                            task_config: TaskConfig, long_models: List[AffineModel],
+                            lat_models: List[StateFeedbackModel],
+                            cws: CostWeights) -> List[CustomState]:
     T = int(np.round(total_time / task_config.dt))
     res = None
     dn_state_list = []
     current_state = start_state
 
-    for i in range(1, T):
-        flat_costs = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
-                             scenario.static_obstacles, scenario.dynamic_obstacles, None)
-        res = car_mpc(i * task_config.dt, i * task_config.dt + horizon_length, current_state, task_config,
-                      scenario.static_obstacles, scenario.dynamic_obstacles, cws, flat_costs)
+    obs_longs, obs_lats = obs_long_lats(scenario.obstacles, 0, T)
+
+    obs_long_res: Dict[int, IMMResult] = {obs.obstacle_id: IMMResult(
+        unif_cat_prior(len(long_models)), obs_longs[obs.obstacle_id][0], None,
+        np.tile(obs_longs[obs.obstacle_id][0], (len(long_models), 1)),
+        np.tile(np.identity(3), (len(long_models), 1, 1)))
+        for obs in scenario.obstacles}
+
+    obs_lat_res: Dict[int, IMMResult] = {obs.obstacle_id: IMMResult(
+        closest_lane_prior(obs_lats[obs.obstacle_id][0, 0], lat_models, 0.9), obs_lats[obs.obstacle_id][0], None,
+        np.tile(obs_lats[obs.obstacle_id][0], (len(lat_models), 1)),
+        np.tile(np.identity(len(obs_lats[obs.obstacle_id][0])), (len(lat_models), 1, 1)))
+        for obs in scenario.obstacles}
+
+    prediction_steps = int(round(horizon_length / task_config.dt)) - 1
+
+    for i in range(0, T - 1):
+        obs_pred_longs = {}
+        obs_pred_lats = {}
+        for obs in scenario.obstacles:
+            # At i = 0, we don't take a measurement, assume we start correct:
+            if i > 0:
+                # Get the current state of each obstacle
+                true_long, true_lat = obs_longs[obs.obstacle_id][i], obs_lats[obs.obstacle_id][i]
+
+                # Get its measurement
+                z_long = measure_from_state(true_long, long_models[0])
+                z_lat = measure_from_state(true_lat, lat_models[0])
+
+                prev_long_res = obs_long_res[obs.obstacle_id]
+                prev_lat_res = obs_lat_res[obs.obstacle_id]
+
+                # One-step IMM Kalman filter
+                obs_long_res[obs.obstacle_id] = imm_kalman_filter(long_models, sticky_m_trans(len(long_models), 0.95),
+                                             prev_long_res.model_ps,
+                                             prev_long_res.model_mus,
+                                             prev_long_res.model_covs, z_long)
+
+                obs_lat_res[obs.obstacle_id] = imm_kalman_filter(lat_models, sticky_m_trans(len(lat_models), 0.95), prev_lat_res.model_ps,
+                                            prev_lat_res.model_mus,
+                                            prev_lat_res.model_covs, z_lat)
+
+
+            # Predict forward using top mode
+            pred_longs = target_state_prediction(obs_long_res[obs.obstacle_id].fused_mu, long_models, obs_long_res[obs.obstacle_id].model_ps, prediction_steps)
+            pred_lats = target_state_prediction(obs_lat_res[obs.obstacle_id].fused_mu, lat_models, obs_lat_res[obs.obstacle_id].model_ps, prediction_steps)
+
+            obs_pred_longs[obs.obstacle_id] = np.concatenate(([obs_long_res[obs.obstacle_id].fused_mu], pred_longs), axis=0)
+            obs_pred_lats[obs.obstacle_id] = np.concatenate(([obs_lat_res[obs.obstacle_id].fused_mu], pred_lats), axis=0)
+
+        flat_cost = car_mpc(prediction_steps + 1, current_state, task_config,
+                            scenario.obstacles, obs_pred_longs, obs_pred_lats, None, None)
+        res = car_mpc(prediction_steps + 1, current_state, task_config,
+                      scenario.obstacles, obs_pred_longs, obs_pred_lats, cws, flat_cost)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
-                                    acceleration=res.accs[1], time_step=i)
+                                    acceleration=res.accs[1], time_step=i + 1)
         dn_state_list.append(current_state)
 
     return dn_state_list

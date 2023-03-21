@@ -31,7 +31,6 @@ lane_centres = [-1.75, 1.75, 5.25]
 lat_models = [
     lat_model(dt, kd, 7, p_ref, 0.1, 0.1)
     for kd in np.linspace(3.0, 5.0, 3)
-    # for kp in np.linspace(4, 9, 3)
     for p_ref in lane_centres]
 
 # Convert to kalman filter format? (long_pos, x_long_vel, long_acc)
@@ -137,7 +136,7 @@ def animate(i):
         ax.scatter(long_mus[i, 0], lat_mus[i, 0], color='purple', zorder=1000)
 
 
-ani = FuncAnimation(fig, animate, frames=T, interval=32, repeat=True, repeat_delay=200)
+ani = FuncAnimation(fig, animate, frames=T, interval=300, repeat=True, repeat_delay=200)
 ani.save("kalmanPredictions.gif", animation.PillowWriter(fps=3))
 
 plt.tight_layout()

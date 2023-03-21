@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from itertools import product
-from typing import Tuple, List
+from typing import Tuple, List, Any
 
 import numpy as np
 from numpy.random import multivariate_normal as rand_mvn
@@ -312,21 +312,27 @@ def closest_lane_prior(lat_start: float, lat_models: List[StateFeedbackModel], m
 
 def imm_batch(models: List[AffineModel], m_trans: np.ndarray, m_prior: np.ndarray, mu_prior: np.ndarray,
               cov_prior: np.ndarray, zs: np.ndarray):
-    m_ps = m_prior
-    current_mus = mu_prior
-    current_covs = cov_prior
+
+    imm_res = IMMResult(m_prior, None, None, mu_prior, cov_prior)
     fused_mus = []
     fused_covs = []
     model_prob_time = []
 
     for i, z in enumerate(zs):
-        m_ps, fused_mu, fused_cov, current_mus, current_covs = imm_kalman_filter(models, m_trans, m_ps, current_mus,
-                                                                                 current_covs, z)
-        fused_mus.append(fused_mu)
-        fused_covs.append(fused_cov)
-        model_prob_time.append(m_ps)
+        imm_res = imm_kalman_filter(models, m_trans, imm_res.model_ps, imm_res.model_mus, imm_res.model_covs, z)
+        fused_mus.append(imm_res.fused_mu)
+        fused_covs.append(imm_res.fused_cov)
+        model_prob_time.append(imm_res.model_ps)
 
     return np.array(fused_mus), np.array(fused_covs), np.array(model_prob_time)
+
+@dataclass
+class IMMResult:
+    model_ps: np.ndarray
+    fused_mu: np.ndarray
+    fused_cov: np.ndarray
+    model_mus: np.ndarray
+    model_covs: np.ndarray
 
 
 def imm_kalman_filter(models: List[AffineModel],
@@ -334,7 +340,7 @@ def imm_kalman_filter(models: List[AffineModel],
                       old_model_ps: np.ndarray,
                       old_mus: np.ndarray,
                       old_covs: np.ndarray,
-                      z: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                      z: np.ndarray) -> IMMResult:
     # Evaluate model mixing probabilities
     mix_probs = eval_mix_probs(models, m_trans_ps, old_model_ps)
     # print("Mix probs: ", mix_probs)
@@ -360,14 +366,14 @@ def imm_kalman_filter(models: List[AffineModel],
     model_ps = np.exp(np.array(log_model_ps) - logsumexp(log_model_ps))
 
     # Compute the fused estimates
-    fused_mu = sum([k_res.est_mu * model_p for k_res, model_p in zip(model_kf_ests, model_ps)])
-    fused_cov = sum(
+    fused_mu = np.sum([k_res.est_mu * model_p for k_res, model_p in zip(model_kf_ests, model_ps)], axis=0)
+    fused_cov = np.sum(
         [(k_res.est_cov + np.diag(fused_mu - k_res.est_mu) @ np.diag(fused_mu - k_res.est_mu).T) * model_p for
          k_res, model_p in
-         zip(model_kf_ests, model_ps)])
+         zip(model_kf_ests, model_ps)], axis=0)
 
-    return model_ps, fused_mu, fused_cov, np.array([k_res.est_mu for k_res in model_kf_ests]), np.array(
-        [k_res.est_cov for k_res in model_kf_ests])
+    return IMMResult(model_ps, fused_mu, fused_cov, np.array([k_res.est_mu for k_res in model_kf_ests]), np.array(
+        [k_res.est_cov for k_res in model_kf_ests]))
 
 
 def eval_mix_probs(models: List[AffineModel], m_trans_ps: np.ndarray, old_model_ps: np.ndarray) -> np.ndarray:
