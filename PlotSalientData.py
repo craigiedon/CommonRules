@@ -24,9 +24,6 @@ class SimpleClassPEM(nn.Module):
         return logits
 
 
-
-
-
 inp_path = "data/salient_inputs.txt"
 label_path = "data/salient_labels.txt"
 
@@ -60,7 +57,7 @@ s_det = torch.from_numpy(s_det).to(dtype=torch.float)
 # clf = MLPClassifier(hidden_layer_sizes=(5, 2), alpha=1e-5, random_state=1)
 # clf.fit(X, s_det)
 
-pem = SimpleClassPEM(X.shape[1], 20)
+pem = SimpleClassPEM(X.shape[1], 20).cuda()
 # pem = nn.Linear(2,1)
 # Loss
 logits_loss_fn = nn.BCEWithLogitsLoss()
@@ -68,6 +65,8 @@ optim = torch.optim.Adam(pem.parameters(), lr=1e-2)
 # optim = torch.optim.SGD(pem.parameters(), lr=1e-2)
 
 train_idx, val_idx = next(StratifiedShuffleSplit(n_splits=1, random_state=1).split(X, s_det))
+X = X.cuda()
+s_det=  s_det.cuda()
 train_data = TensorDataset(X[train_idx], s_det[train_idx])
 val_data = TensorDataset(X[val_idx], s_det[val_idx])
 
@@ -75,7 +74,7 @@ train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
 val_loader = DataLoader(val_data, batch_size=1024, shuffle=False)
 
 # Batches from dataloader
-epochs = 100
+epochs = 5000
 
 avg_train_losses = []
 avg_val_losses = []
