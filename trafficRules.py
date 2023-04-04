@@ -9,6 +9,7 @@ from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.state import State, KSState, CustomState
 
 from stl import G, GEQ0, stl_rob, F, U, STLExp, LEQ0, And, Or, Neg, Implies, O, H, LEQc, GEQc, LEQ, GEQ, Tru
+from utils import rot_mat
 
 
 def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
@@ -28,13 +29,6 @@ def in_lane(car: Obstacle, lane_centre: float, lane_width: float) -> STLExp:
         return dist - lane_width / 2.0
 
     return LEQ0(f)
-
-
-def rot_mat(r: float) -> np.ndarray:
-    return np.array([
-        [np.cos(r), -np.sin(r)],
-        [np.sin(r), np.cos(r)]]
-    )
 
 
 def rear(car: Obstacle, s: Dict[int, KSState]) -> np.ndarray:
@@ -437,8 +431,8 @@ def consider_entering_vehicles_rule(ego_car: Obstacle, other_cars: List[Obstacle
             in_front_of(other_car, ego_car),
             on_access_ramp(other_car, access_cs, lane_widths),
             F(And([on_main_carriageway(other_car, main_cw_cs, lane_widths),
-                    Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, 1000)
-            ])
+                   Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, 1000)
+        ])
 
         rhs = U(Neg(in_lane(ego_car, rh_lane, lane_widths)),
                 And([

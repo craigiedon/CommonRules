@@ -9,6 +9,17 @@ from matplotlib import pyplot as plt, animation
 from matplotlib.animation import FuncAnimation
 
 
+def rot_mat(r: float) -> np.ndarray:
+    return np.array([
+        [np.cos(r), -np.sin(r)],
+        [np.sin(r), np.cos(r)]]
+    )
+
+
+def angle_diff(a1: float, a2: float) -> float:
+    return np.arctan2(np.sin(a1 - a2), np.cos(a1 - a2))
+
+
 def animate_scenario_old(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
     fig, ax = plt.subplots(figsize=(25, 3))
     rnd = MPRenderer(ax=ax)
