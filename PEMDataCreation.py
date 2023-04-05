@@ -84,8 +84,9 @@ def run():
     salient_inputs = []
     salient_labels = []
     for pp_res, kv_info in zip(pp_kitti_res, kitti_val_infos):
-        mod_cars = filter_classes(["Car"], pp_res)
         tru_cars = filter_classes(["Car"], kv_info)
+        # mod_cars = filter_classes(["Car"], pp_res)
+        mod_cars = pp_res
 
         mod_locs = mod_cars["location"]
         mod_dims = mod_cars["dimensions"]
@@ -108,13 +109,13 @@ def run():
             if tru_occs[ti] == 3:
                 continue
 
-            # Ins: tru_loc_x, tru_loc_z, tru_rot_y, occlusion
+            # Ins: tru_loc_x, tru_loc_z, tru_rot_y, tru_dim_l, tru_dim_w, occlusion
             # Outs: detected, err_loc_x, err_loc_z, err_rot_y (careful with identities!)
-            s_in = [tru_locs[ti][0], tru_locs[ti][2], tru_ry[ti], tru_occs[ti]]
-
+            s_in = [tru_locs[ti][0], tru_locs[ti][2], tru_ry[ti], tru_dims[ti][0], tru_dims[ti][2], tru_occs[ti]]
 
             if mi is not None:
-                s_label = [1, tru_locs[ti][0] - mod_locs[mi][0], tru_locs[ti][2] - mod_locs[mi][2], angle_diff(tru_ry[ti], mod_ry[mi])]
+                s_label = [1, tru_locs[ti][0] - mod_locs[mi][0], tru_locs[ti][2] - mod_locs[mi][2],
+                           angle_diff(tru_ry[ti], mod_ry[mi])]
             else:
                 s_label = [0, -1000, -1000, -1000]
 
@@ -123,19 +124,18 @@ def run():
 
         assert len(salient_inputs) == len(salient_labels)
 
-        print("Len salient inputs: ", len(salient_inputs))
+        # print("Len salient inputs: ", len(salient_inputs))
 
     print("Total length: ", len(salient_inputs))
     print(len(salient_inputs))
     print(len(salient_labels))
 
     np.savetxt("data/salient_inputs.txt", salient_inputs,
-               fmt=['%.3f', "%.3f", "%.3f", "%.0f"],
-               header="Format: <loc_x> <loc_z> <rot_y> <occlusion>")
+               fmt=['%.3f', "%.3f", "%.3f", "%.3f", "%.3f", "%.0f"],
+               header="Format: <loc_x> <loc_z> <rot_y> <dim_l> <dim_w> <occlusion>")
 
-    np.savetxt("data/salient_labels.txt", salient_labels, fmt='%.0f',
+    np.savetxt("data/salient_labels.txt", salient_labels, fmt=['%.0f',"%.3f", "%.3f", "%.3f" ],
                header="Format: <detected> <err_loc_x> <err_loc_z> <err_rot_y>")
-
 
     # TODO: Dig up the sanity check code to see that it was done correctly?
     # TODO: Plot the difference between the "true" locations and the "actual" locations?
