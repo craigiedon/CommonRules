@@ -16,12 +16,12 @@ class SimpleClassPEM(nn.Module):
         self.ff_nn = nn.Sequential(
             nn.Linear(x_dim, h_dim),
             nn.ReLU(),
-            # nn.Dropout(),
             nn.BatchNorm1d(h_dim),
+            nn.Dropout(),
             nn.Linear(h_dim, h_dim),
             nn.ReLU(),
             nn.BatchNorm1d(h_dim),
-            # nn.Dropout(),
+            nn.Dropout(),
             nn.Linear(h_dim, 1)
         )
 
@@ -68,11 +68,14 @@ def plot_roc(v_data, model, model_name):
     plt.ylabel("True Positive Rate")
     plt.plot(np.linspace(0, 1), np.linspace(0, 1), '--', color='black', alpha=0.4)
 
+
 def train_model(train_loader, val_loader, pem, loss_fn, epochs) -> nn.Module:
     avg_train_losses = []
     avg_val_losses = []
 
-    optim = torch.optim.Adam(pem.parameters())
+    # optim = torch.optim.Adam(pem.parameters())
+    optim = torch.optim.AdamW(pem.parameters())
+    # optim = torch.optim.SGD(pem.parameters(), 1e-3, 0.9)
 
     for i in range(epochs):
 
@@ -128,11 +131,11 @@ def train_model(train_loader, val_loader, pem, loss_fn, epochs) -> nn.Module:
 
     plt.plot(range(epochs), avg_train_losses, label='train')
     plt.plot(range(epochs), avg_val_losses, label='val')
+    plt.legend(loc='best')
     plt.show()
 
-        # if i % checkpoint_interval == 0:
-        #     plot_roc(val_data, pem, i)
-
+    # if i % checkpoint_interval == 0:
+    #     plot_roc(val_data, pem, i)
 
     return pem
 
@@ -141,8 +144,8 @@ def run():
     inp_path = "data/salient_inputs.txt"
     label_path = "data/salient_labels.txt"
 
-    s_inp = np.loadtxt(inp_path)
-    s_label = np.loadtxt(label_path)
+    s_inp = torch.from_numpy(np.loadtxt(inp_path)).to(dtype=torch.float)
+    s_label = torch.from_numpy(np.loadtxt(label_path)).to(dtype=torch.float)
 
     detections_by_occlusion(s_inp, s_label)
     occ_mus = mus_by_occlusion(s_inp, s_label).cuda()
@@ -156,14 +159,13 @@ def run():
     s_lens = s_inp[:, 3]
     s_ws = s_inp[:, 4]
     # X = np.stack((s_xs, s_zs, s_rys, s_lens, s_ws), axis=1)
-    X = np.stack((s_xs, s_zs, s_rys), axis=1)
-
-    X = torch.from_numpy(X).to(dtype=torch.float)
+    # X = np.stack((s_xs, s_zs, s_rys), axis=1)
+    X = torch.column_stack((s_xs, s_zs, torch.sin(s_rys), torch.cos(s_rys), s_lens, s_ws))
     mu = X.mean(dim=0)
     std = X.std(dim=0)
     X = (X - X.mean(dim=0)) / X.std(dim=0)
 
-    s_occs = torch.from_numpy(s_inp[:, 5]).to(dtype=torch.long)
+    s_occs = s_inp[:, 5].to(dtype=torch.long)
     one_hot_occs = F.one_hot(s_occs)
 
     X = torch.column_stack((X, one_hot_occs))
@@ -171,7 +173,6 @@ def run():
     # X = (s_occs / 2.0).unsqueeze(1)
 
     s_det = s_label[:, 0]
-    s_det = torch.from_numpy(s_det).to(dtype=torch.float)
     g_mu = torch.mean(s_det)
 
     train_idx, val_idx = next(StratifiedShuffleSplit(n_splits=1, random_state=1).split(X, s_det))
@@ -181,15 +182,16 @@ def run():
     train_data = TensorDataset(X[train_idx], s_det[train_idx])
     val_data = TensorDataset(X[val_idx], s_det[val_idx])
 
-    train_loader = DataLoader(train_data, batch_size=1024, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=1024, shuffle=False)
+    batch_size = 512
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
 
     bce_logit_loss_fn = nn.BCEWithLogitsLoss()
     focal_loss_fn = lambda inps, targs: sigmoid_focal_loss(inps, targs, reduction='mean', alpha=0.6)
 
     # Batches from dataloader
-    epochs = [250]
-    capacities = [128]
+    epochs = [1000]
+    capacities = [256]
     loss_fns = [bce_logit_loss_fn]
 
     configs = list(itertools.product(capacities, epochs, loss_fns))
@@ -202,33 +204,44 @@ def run():
     for (c, e, l_fn), pm in zip(configs, pems):
         plot_roc(val_loader.dataset, pm, f"C:{c} E:{e} L:{l_fn}")
 
-
     plt.legend()
     plt.show()
 
     num_x, num_y = 50, 50
-    ps = torch.stack(torch.meshgrid([torch.linspace(-100, 100, num_x), torch.linspace(-100, 100, num_y)]), dim=2).reshape(-1, 2)
-    ps = (ps - mu[0:2]) / std[0:2]
+    ps = torch.stack(torch.meshgrid([torch.linspace(-100, 100, num_x), torch.linspace(-100, 100, num_y)]), dim=2).reshape(
+        -1, 2)
 
-    ev_rot = torch.full((len(ps),), -np.pi / 2.0) # -np.pi / 2.0)
-    ev_rot = (ev_rot - mu[2]) / std[2]
-    ev_occ = F.one_hot(torch.tensor(2), num_classes=3).repeat(len(ps), 1)
+    # ps = (ps - mu[0:2]) / std[0:2]
 
-    eval_xs = torch.column_stack((ps, ev_rot, ev_occ))
-    m = pems[0]
+    for o in range(3):
+        # Displaying them in reverse order here just to line up with a presentation
+        plt.subplot(1, 3, 3 - o)
 
-    # TODO: Oh shit --- i am an idiot: You need to *Normalize* here!!!
-    z_preds = torch.sigmoid(m(eval_xs.cuda())).cpu().detach().reshape(num_x, num_y)
+        # eval_xs = torch.column_stack((ps, ev_rot, ev_occ))
+        ev_rot = torch.full((len(ps),), -np.pi / 2.0)  # -np.pi / 2.0)
+        ev_l = torch.full((len(ps),), 4.0)  # -np.pi / 2.0)
+        ev_w = torch.full((len(ps),), 1.6)  # -np.pi / 2.0)
+        # ev_rot = (ev_rot - mu[2]) / std[2]
 
-    ps = ps.reshape(num_x, num_y, 2)
+        eval_xs = torch.column_stack((ps, torch.sin(ev_rot), torch.cos(ev_rot), ev_l, ev_w))
+        eval_xs = (eval_xs - mu) / std
 
+        ev_occ = F.one_hot(torch.tensor(o), num_classes=3).repeat(len(ps), 1)
+        eval_xs = torch.column_stack((eval_xs, ev_occ))
+        m = pems[0]
 
-    plt.pcolormesh(ps[:,:, 0], ps[:,:, 1], z_preds)
-    plt.colorbar()
+        with torch.no_grad():
+            m.eval()
+            z_preds = torch.sigmoid(m(eval_xs.cuda())).cpu().detach().reshape(num_x, num_y)
+
+        p_grid = ps.reshape(num_x, num_y, 2)
+
+        plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_preds)
+        plt.colorbar()
+        # plt.tight_layout()
+
+    # plt.tight_layout()
     plt.show()
-
-    # TODO: Hmm...so, can I do some analysis? The analysis I would like to do is...meshgrid up the whole x-y space, split by occlusion, and interpolate between?
-
 
 
 

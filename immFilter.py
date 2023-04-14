@@ -190,9 +190,12 @@ def run():
     plt.show()
 
     fig, axs = plt.subplots(1, 1)
-    axs.scatter(xs_long[:, 0], xs_lat[:, 0], color='black', facecolors='none', s=4.0)
-    axs.scatter(zs_long[:, 0], zs_lat, marker='x')
-    axs.plot(long_mus[:, 0], lat_mus[:, 0], color='orange')
+    axs.scatter(xs_long[:, 0], xs_lat[:, 0], color='black', facecolors='none', s=4.0, label="True State")
+    axs.scatter(zs_long[:, 0], zs_lat, marker='x', label="Sensor Observations")
+    axs.plot(long_mus[:, 0], lat_mus[:, 0], color='orange', label="IMM")
+    axs.set_xlabel("Longitude (m)")
+    axs.set_ylabel("Latitude (m)")
+    axs.legend(loc="best")
     plt.show()
 
 
