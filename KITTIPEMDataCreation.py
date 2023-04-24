@@ -130,11 +130,11 @@ def run():
     print(len(salient_inputs))
     print(len(salient_labels))
 
-    np.savetxt("data/salient_inputs.txt", salient_inputs,
+    np.savetxt("data/KITTI/salient_inputs.txt", salient_inputs,
                fmt=['%.3f', "%.3f", "%.3f", "%.3f", "%.3f", "%.0f"],
                header="Format: <loc_x> <loc_z> <rot_y> <dim_l> <dim_w> <occlusion>")
 
-    np.savetxt("data/salient_labels.txt", salient_labels, fmt=['%.0f',"%.3f", "%.3f", "%.3f" ],
+    np.savetxt("data/KITTI/salient_labels.txt", salient_labels, fmt=['%.0f',"%.3f", "%.3f", "%.3f" ],
                header="Format: <detected> <err_loc_x> <err_loc_z> <err_rot_y>")
 
     # TODO: Dig up the sanity check code to see that it was done correctly?

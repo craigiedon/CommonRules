@@ -4,6 +4,7 @@ import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -15,13 +16,15 @@ class SimpleClassPEM(nn.Module):
         super().__init__()
         self.ff_nn = nn.Sequential(
             nn.Linear(x_dim, h_dim),
-            nn.ReLU(),
-            nn.BatchNorm1d(h_dim),
-            nn.Dropout(),
+            # nn.ReLU(),
+            nn.Tanh(),
+            # nn.BatchNorm1d(h_dim),
+            # nn.Dropout(),
             nn.Linear(h_dim, h_dim),
-            nn.ReLU(),
-            nn.BatchNorm1d(h_dim),
-            nn.Dropout(),
+            nn.Tanh(),
+            # nn.ReLU(),
+            # nn.BatchNorm1d(h_dim),
+            # nn.Dropout(),
             nn.Linear(h_dim, 1)
         )
 
@@ -58,62 +61,37 @@ def guess_mu_by_occ(x, occ_mus):
     return mu_choices.unsqueeze(1)
 
 
-def plot_roc(v_data, model, model_name):
-    with torch.no_grad():
-        final_val_preds = torch.sigmoid(model(v_data.tensors[0]))
-    fpr, tpr, threshs = roc_curve(v_data.tensors[1].cpu(), final_val_preds.cpu(), pos_label=1)
-    print(f"ROC AUC: {model_name} --- {roc_auc_score(v_data.tensors[1].cpu(), final_val_preds.cpu())}")
+def plot_roc(v_labels: Tensor, final_val_preds, model_name):
+    fpr, tpr, threshs = roc_curve(v_labels, final_val_preds, pos_label=1)
+    print(f"ROC AUC: {model_name} --- {roc_auc_score(v_labels, final_val_preds)}")
     plt.plot(fpr, tpr, label=model_name)
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.plot(np.linspace(0, 1), np.linspace(0, 1), '--', color='black', alpha=0.4)
 
 
-def train_model(train_loader, val_loader, pem, loss_fn, epochs) -> nn.Module:
+def train_model(train_loader, val_loader, pem, loss_fn, epochs, plot=False) -> nn.Module:
     avg_train_losses = []
     avg_val_losses = []
 
-    # optim = torch.optim.Adam(pem.parameters())
     optim = torch.optim.AdamW(pem.parameters())
-    # optim = torch.optim.SGD(pem.parameters(), 1e-3, 0.9)
+    # optim = torch.optim.Adam(pem.parameters())
 
     for i in range(epochs):
 
         pem.train()
         train_losses = []
-        # guess_one_losses = []
-        # guess_mu_losses = []
-        # guess_om_losses = []
         for x, label in train_loader:
             pred = pem(x)
             loss = loss_fn(pred, label.unsqueeze(1))
-
-            # pred_nans = pred[torch.isnan(pred)]
-            # x_nans = x[torch.isnan(x)]
-
-            # g1_loss = pure_loss_fn(torch.ones_like(pred), label.unsqueeze(1))
-            # g_mu_loss = pure_loss_fn(torch.full_like(pred, g_mu), label.unsqueeze(1))
-
-            # g_om = guess_mu_by_occ(x.detach(), occ_mus.detach()).detach()
-            # F.binary_cross_entropy(g_om, label.unsqueeze(1).detach())
-            # g_om_loss = F.binary_cross_entropy(g_om, label.unsqueeze(1).detach())
-            # with torch.no_grad():
-            #     g_om_loss = F.binary_cross_entropy(g_om, torch.ones_like(g_om))
-            # g_om_loss = pure_loss_fn(g_om, label.unsqueeze(1).detach())
 
             optim.zero_grad()
             loss.backward()
             optim.step()
 
             train_losses.append(loss.item())
-            # guess_one_losses.append(g1_loss.item())
-            # guess_mu_losses.append(g_mu_loss.item())
-            # guess_om_losses.append(g_om_loss.item())
 
         avg_train_loss = np.mean(train_losses)
-        # avg_g1_loss = np.mean(guess_one_losses)
-        # avg_gmu_loss = np.mean(guess_mu_losses)
-        # avg_gom_loss = np.mean(guess_om_losses)
 
         pem.eval()
         val_losses = []
@@ -129,20 +107,18 @@ def train_model(train_loader, val_loader, pem, loss_fn, epochs) -> nn.Module:
         avg_train_losses.append(avg_train_loss)
         avg_val_losses.append(avg_val_loss)
 
-    plt.plot(range(epochs), avg_train_losses, label='train')
-    plt.plot(range(epochs), avg_val_losses, label='val')
-    plt.legend(loc='best')
-    plt.show()
-
-    # if i % checkpoint_interval == 0:
-    #     plot_roc(val_data, pem, i)
+    if plot:
+        plt.plot(range(epochs), avg_train_losses, label='train')
+        plt.plot(range(epochs), avg_val_losses, label='val')
+        plt.legend(loc='best')
+        plt.show()
 
     return pem
 
 
 def run():
-    inp_path = "data/salient_inputs.txt"
-    label_path = "data/salient_labels.txt"
+    inp_path = "data/KITTI/salient_inputs.txt"
+    label_path = "data/KITTI/salient_labels.txt"
 
     s_inp = torch.from_numpy(np.loadtxt(inp_path)).to(dtype=torch.float)
     s_label = torch.from_numpy(np.loadtxt(label_path)).to(dtype=torch.float)
