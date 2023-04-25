@@ -9,10 +9,13 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticOb
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.state import InitialState, KSState
 from commonroad.scenario.trajectory import State, Trajectory
+from commonroad.visualization.mp_renderer import MPRenderer
 from matplotlib import pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights, receding_horizon, \
     kalman_receding_horizon
+from KalmanPredictionVisuals import animate_kalman_predictions
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
 from utils import animate_scenario
 
@@ -55,7 +58,7 @@ def run():
         for kd in np.linspace(3.0, 5.0, 3)
         for p_ref in lane_centres]
 
-    dn_state_list = kalman_receding_horizon(end_time, 1.0, start_state, scenario, task_config, long_models, lat_models,
+    dn_state_list = kalman_receding_horizon(end_time, 2.5, start_state, scenario, task_config, long_models, lat_models,
                                             cws)
 
     dyn_obs_shape = Rectangle(width=task_config.car_height, length=task_config.car_width)
@@ -72,6 +75,17 @@ def run():
 
     # plt.plot([s.acceleration for s in dn_state_list])
     # plt.show()
+
+    # Show a visual that has the prediction parts too
+    fig, ax = plt.subplots(figsize=(25, 3))
+    rnd = MPRenderer(ax=ax)
+    rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
+    rnd.draw_params.dynamic_obstacle.show_label = True
+    ani = FuncAnimation(fig, lambda i: animate_kalman_predictions(i, ax, rnd, scenario, obs_tru_long, obs_tru_lat, obs_long_mus, obs_lat_mus, obs_long_preds, obs_lat_preds,
+                                                                  obs_zs_long, obs_zs_lat, False, True),
+                        frames=len(dn_state_list), interval=30, repeat=True, repeat_delay=200)
+    plt.tight_layout()
+    plt.show()
 
     animate_scenario(scenario, int(end_time / task_config.dt),
                      ego_v=dyn_obs, show=True)  # , save_path="complexAnim.gif")

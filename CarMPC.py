@@ -12,7 +12,7 @@ from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
 
 from immFilter import target_state_prediction, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
-    measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult
+    measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_no_obs
 
 
 @dataclass
@@ -258,8 +258,8 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
     # Lane Selection Simplex
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
-    # opti.solver('ipopt', {"ipopt.print_level": 0, "ipopt.max_iter": 10000})
-    opti.solver('ipopt', {"ipopt.check_derivatives_for_naninf": "yes", "ipopt.max_iter": 10000})
+    opti.solver('ipopt', {"ipopt.print_level": 0, "print_time": 0, "ipopt.max_iter": 10000})
+    # opti.solver('ipopt', {"ipopt.check_derivatives_for_naninf": "yes", "ipopt.max_iter": 10000})
 
     if prev_solve is not None:
         opti.set_initial(xs, prev_solve.xs)
@@ -348,14 +348,15 @@ def obs_long_lats(obstacles: List[Obstacle], start_step: int, end_step: int) -> 
     obs_pred_lats = {}
 
     for obs in obstacles:
-        ob_long, ob_lat = long_lat_from_states(obs, start_step, end_step)
+        ob_long, ob_lat = ll_from_CR_state(obs, start_step, end_step)
         obs_pred_longs[obs.obstacle_id] = ob_long
         obs_pred_lats[obs.obstacle_id] = ob_lat
 
     return obs_pred_longs, obs_pred_lats
 
 
-def long_lat_from_states(obs: Obstacle, start_step: int, end_step: int):
+def ll_from_CR_state(obs: Obstacle, start_step: int, end_step: int):
+    # Return long/lat state containing position, velocity and (for long) accelerations
     ob_states = [obs.state_at_time(i) for i in range(start_step, end_step)]
     ob_xs = np.array([s.position[0] for s in ob_states])
     ob_ys = np.array([s.position[1] for s in ob_states])
@@ -374,8 +375,103 @@ def long_lat_from_states(obs: Obstacle, start_step: int, end_step: int):
     assert ob_long_state.shape == (end_step - start_step, 3)
     assert ob_lat_state.shape == (end_step - start_step, 2)
 
-    # Some polar coordinate magic here to get out the
     return ob_long_state, ob_lat_state
+
+
+def initial_longs(obstacles: List[Obstacle], obs_longs: Dict[int, np.ndarray], long_models: List[AffineModel]) -> Dict[
+    int, IMMResult]:
+    i_longs = {}
+    for obs in obstacles:
+        id = obs.obstacle_id
+
+        m_prior = unif_cat_prior(len(long_models))
+        m_mus = np.tile(obs_longs[id][0], (len(long_models), 1))
+        m_covs = np.tile(np.identity(3), (len(long_models), 1, 1))
+        init_res = IMMResult(m_prior, obs_longs[id][0], None, m_mus, m_covs)
+
+        i_longs[id] = init_res
+
+    return i_longs
+
+
+def initial_lats(obstacles: List[Obstacle], obs_lats: Dict[int, np.ndarray], lat_models: List[AffineModel]) -> Dict[
+    int, IMMResult]:
+    i_lats = {}
+    for obs in obstacles:
+        id = obs.obstacle_id
+
+        m_prior = closest_lane_prior(obs_lats[obs.obstacle_id][0, 0], lat_models, 0.9)
+        m_mus = np.tile(obs_lats[obs.obstacle_id][0], (len(lat_models), 1))
+        m_covs = np.tile(np.identity(len(obs_lats[obs.obstacle_id][0])), (len(lat_models), 1, 1))
+        init_res = IMMResult(m_prior, obs_lats[id][0], None, m_mus, m_covs)
+
+        i_lats[id] = init_res
+
+    return i_lats
+
+
+def identity_observation(o: Obstacle,
+                         prev_long_est: np.ndarray,
+                         prev_lat_est: np.ndarray,
+                         tru_long_state: np.ndarray,
+                         tru_lat_state: np.ndarray,
+                         time_step: float) -> Tuple[np.ndarray, np.ndarray]:
+    assert len(tru_long_state) == 3
+    assert len(tru_lat_state) == 2
+
+    # Longitudinal observation: Position / Velocity
+    observed_long_pos = tru_long_state[0]
+    observed_long_vel = (tru_long_state[0] - prev_long_est[0]) / time_step
+    observed_long_state = np.array([observed_long_pos, observed_long_vel])
+
+    # Latitudinal observation: Position
+    observed_lat_state = tru_lat_state[0]
+    return observed_long_state, observed_lat_state
+
+
+def bernoulli_drop_observation(o: Obstacle,
+                               prev_long_est: np.ndarray,
+                               prev_lat_est: np.ndarray,
+                               tru_long_state: np.ndarray,
+                               tru_lat_state: np.ndarray,
+                               time_step: float,
+                               detection_probability: float) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    r = np.random.rand()
+
+    if r > detection_probability:
+        return None, None
+
+    # Longitudinal observation: Position / Velocity
+    observed_long_pos = tru_long_state[0]
+    observed_long_vel = (observed_long_pos - prev_long_est[0]) / time_step
+    observed_long_state = np.array([observed_long_pos, observed_long_vel])
+
+    # Latitudinal observation: Position
+    observed_lat_state = tru_lat_state[0]
+    return observed_long_state, observed_lat_state
+
+
+def toy_drops_noise_observation(o: Obstacle,
+                                prev_long_est: np.ndarray,
+                                prev_lat_est: np.ndarray,
+                                tru_long_state: np.ndarray,
+                                tru_lat_state: np.ndarray,
+                                time_step: float,
+                                detection_probability: float,
+                                noise_var: float) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    r = np.random.rand()
+
+    if r > detection_probability:
+        return None, None
+
+    # Longitudinal observation: Position / Velocity
+    observed_long_pos = tru_long_state[0] + np.random.normal(0.0, noise_var)
+    observed_long_vel = (observed_long_pos - prev_long_est[0]) / time_step
+    observed_long_state = np.array([observed_long_pos, observed_long_vel])
+
+    # Latitudinal observation: Position
+    observed_lat_state = tru_lat_state[0] + np.random.normal(0.0, noise_var)
+    return observed_long_state, observed_lat_state
 
 
 def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
@@ -387,55 +483,75 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
     dn_state_list = []
     current_state = start_state
 
-    obs_longs, obs_lats = obs_long_lats(scenario.obstacles, 0, T)
+    obstacle_longs, obstacle_lats = obs_long_lats(scenario.obstacles, 0, T)
 
-    obs_long_res: Dict[int, IMMResult] = {obs.obstacle_id: IMMResult(
-        unif_cat_prior(len(long_models)), obs_longs[obs.obstacle_id][0], None,
-        np.tile(obs_longs[obs.obstacle_id][0], (len(long_models), 1)),
-        np.tile(np.identity(3), (len(long_models), 1, 1)))
-        for obs in scenario.obstacles}
-
-    obs_lat_res: Dict[int, IMMResult] = {obs.obstacle_id: IMMResult(
-        closest_lane_prior(obs_lats[obs.obstacle_id][0, 0], lat_models, 0.9), obs_lats[obs.obstacle_id][0], None,
-        np.tile(obs_lats[obs.obstacle_id][0], (len(lat_models), 1)),
-        np.tile(np.identity(len(obs_lats[obs.obstacle_id][0])), (len(lat_models), 1, 1)))
-        for obs in scenario.obstacles}
+    # Setup initial state estimation
+    est_long_res = initial_longs(scenario.obstacles, obstacle_longs, long_models)
+    est_lat_res = initial_lats(scenario.obstacles, obstacle_lats, lat_models)
 
     prediction_steps = int(round(horizon_length / task_config.dt)) - 1
 
     for i in range(0, T - 1):
+        print(i)
         obs_pred_longs = {}
         obs_pred_lats = {}
         for obs in scenario.obstacles:
             # At i = 0, we don't take a measurement, assume we start correct:
             if i > 0:
                 # Get the current state of each obstacle
-                true_long, true_lat = obs_longs[obs.obstacle_id][i], obs_lats[obs.obstacle_id][i]
+                true_long, true_lat = obstacle_longs[obs.obstacle_id][i], obstacle_lats[obs.obstacle_id][i]
 
                 # Get its measurement
-                z_long = measure_from_state(true_long, long_models[0])
-                z_lat = measure_from_state(true_lat, lat_models[0])
+                # z_long = measure_from_state(true_long, long_models[0])
+                # z_lat = measure_from_state(true_lat, lat_models[0])
 
-                prev_long_res = obs_long_res[obs.obstacle_id]
-                prev_lat_res = obs_lat_res[obs.obstacle_id]
+                prev_long_res = est_long_res[obs.obstacle_id]
+                prev_lat_res = est_lat_res[obs.obstacle_id]
+
+                # z_long, z_lat = identity_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu, true_long,
+                #                                      true_lat, task_config.dt)
+
+                z_long, z_lat = toy_drops_noise_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu,
+                                                           true_long,
+                                                           true_lat, task_config.dt, 0.5, 0.1)
+
+                # assert np.isclose(z_id_long, true_long[0:2]).all()
+                # assert np.isclose(z_id_lat, true_lat[0]).all()
 
                 # One-step IMM Kalman filter
-                obs_long_res[obs.obstacle_id] = imm_kalman_filter(long_models, sticky_m_trans(len(long_models), 0.95),
-                                             prev_long_res.model_ps,
-                                             prev_long_res.model_mus,
-                                             prev_long_res.model_covs, z_long)
-
-                obs_lat_res[obs.obstacle_id] = imm_kalman_filter(lat_models, sticky_m_trans(len(lat_models), 0.95), prev_lat_res.model_ps,
-                                            prev_lat_res.model_mus,
-                                            prev_lat_res.model_covs, z_lat)
-
+                if z_long is not None:
+                    est_long_res[obs.obstacle_id] = imm_kalman_filter(long_models,
+                                                                      sticky_m_trans(len(long_models), 0.95),
+                                                                      prev_long_res.model_ps,
+                                                                      prev_long_res.model_mus,
+                                                                      prev_long_res.model_covs, z_long)
+                else:
+                    est_long_res[obs.obstacle_id] = imm_kalman_no_obs(long_models,
+                                                                      sticky_m_trans(len(long_models), 0.95),
+                                                                      prev_long_res.model_ps,
+                                                                      prev_long_res.model_mus,
+                                                                      prev_long_res.model_covs)
+                if z_lat is not None:
+                    est_lat_res[obs.obstacle_id] = imm_kalman_filter(lat_models, sticky_m_trans(len(lat_models), 0.95),
+                                                                     prev_lat_res.model_ps,
+                                                                     prev_lat_res.model_mus,
+                                                                     prev_lat_res.model_covs, z_lat)
+                else:
+                    est_lat_res[obs.obstacle_id] = imm_kalman_no_obs(lat_models, sticky_m_trans(len(lat_models), 0.95),
+                                                                     prev_lat_res.model_ps,
+                                                                     prev_lat_res.model_mus,
+                                                                     prev_lat_res.model_covs)
 
             # Predict forward using top mode
-            pred_longs = target_state_prediction(obs_long_res[obs.obstacle_id].fused_mu, long_models, obs_long_res[obs.obstacle_id].model_ps, prediction_steps)
-            pred_lats = target_state_prediction(obs_lat_res[obs.obstacle_id].fused_mu, lat_models, obs_lat_res[obs.obstacle_id].model_ps, prediction_steps)
+            pred_longs = target_state_prediction(est_long_res[obs.obstacle_id].fused_mu, long_models,
+                                                 est_long_res[obs.obstacle_id].model_ps, prediction_steps)
+            pred_lats = target_state_prediction(est_lat_res[obs.obstacle_id].fused_mu, lat_models,
+                                                est_lat_res[obs.obstacle_id].model_ps, prediction_steps)
 
-            obs_pred_longs[obs.obstacle_id] = np.concatenate(([obs_long_res[obs.obstacle_id].fused_mu], pred_longs), axis=0)
-            obs_pred_lats[obs.obstacle_id] = np.concatenate(([obs_lat_res[obs.obstacle_id].fused_mu], pred_lats), axis=0)
+            obs_pred_longs[obs.obstacle_id] = np.concatenate(([est_long_res[obs.obstacle_id].fused_mu], pred_longs),
+                                                             axis=0)
+            obs_pred_lats[obs.obstacle_id] = np.concatenate(([est_lat_res[obs.obstacle_id].fused_mu], pred_lats),
+                                                            axis=0)
 
         flat_cost = car_mpc(prediction_steps + 1, current_state, task_config,
                             scenario.obstacles, obs_pred_longs, obs_pred_lats, None, None)
