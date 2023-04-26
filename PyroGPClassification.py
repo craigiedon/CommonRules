@@ -17,6 +17,7 @@ from pyro.contrib.gp.kernels import Product
 from pyro.infer import TraceMeanField_ELBO, JitTraceMeanField_ELBO, Trace_ELBO
 from pyro.infer.util import torch_backward, torch_item
 from sklearn.model_selection import StratifiedShuffleSplit
+from torch import nn
 from torch.utils.data import TensorDataset
 
 from NuScenesAnalysis import load_nuscenes_salient, norm_saved
@@ -63,6 +64,30 @@ def train_gp(vgsp, val_data, num_steps, optimizer, scheduler_step=None):
     return losses, val_losses
 
 
+def save_gp_classifier(folder_path: str, vsgp: gp.models.VariationalSparseGP):
+    # Make folder on folder path (re-create if already there)
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Save important model details
+    torch.save(vsgp.state_dict(), os.path.join(folder_path, "state_dict.pt"))
+    torch.save(vsgp.X, os.path.join(folder_path, "train_ins.pt"))
+    torch.save(vsgp.y, os.path.join(folder_path, "train_labels.pt"))
+    torch.save(vsgp.Xu, os.path.join(folder_path, "inducing_points.pt"))
+    torch.save(vsgp.kernel, os.path.join(folder_path, "kernel.pt"))
+
+
+def load_gp_classifier(folder_path):
+    train_ins = torch.load(os.path.join(folder_path, "train_ins.pt"))
+    train_labels = torch.load(os.path.join(folder_path, "train_labels.pt"))
+    Xu = torch.load(os.path.join(folder_path, "inducing_points.pt"))
+    kernel = torch.load(os.path.join(folder_path, "kernel.pt"))
+
+    vsgp = gp.models.VariationalSparseGP(train_ins, train_labels, kernel, Xu, gp.likelihoods.Binary(),
+                                         jitter=1e-03).cuda()
+    vsgp.load_state_dict(torch.load(os.path.join(folder_path, "state_dict.pt")))
+    return vsgp
+
+
 def run():
     norm_mus = torch.load("data/nuscenes/inp_mus.pt")
     norm_stds = torch.load("data/nuscenes/inp_stds.pt")
@@ -77,6 +102,7 @@ def run():
     val_data = TensorDataset(X[val_idx], labels[val_idx])
 
     kernel = gp.kernels.RationalQuadratic(X.shape[1])
+
     likelihood = gp.likelihoods.Binary()
 
     subset = len(train_data.tensors[0])
@@ -96,8 +122,8 @@ def run():
                                          jitter=1e-03).cuda()
 
     elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=500,
-                      optimizer=torch.optim.AdamW(vsgp.parameters(), lr=0.1),
-                      scheduler_step=200)
+                                       optimizer=torch.optim.AdamW(vsgp.parameters(), lr=0.1),
+                                       scheduler_step=200)
 
     plot_loss(elbo_losses)
     plt.show()
@@ -105,9 +131,12 @@ def run():
     plot_loss(val_losses)
     plt.show()
 
-    torch.save(vsgp.state_dict(), f"models/nuscenes/vsgp_class_i{len(Xu)}.pt")
+    # torch.save(vsgp.state_dict(), f"models/nuscenes/vsgp_class_i{len(Xu)}.pt")
+    # vsgp.load_state_dict(torch.load(f"models/nuscenes/vsgp_class_i{len(Xu)}.pt"))
 
-    vsgp.load_state_dict(torch.load(f"models/nuscenes/vsgp_class_i{len(Xu)}.pt"))
+    save_gp_classifier(f"models/nuscenes/vsgp_class", vsgp)
+
+    vsgp = load_gp_classifier(f"models/nuscenes/vsgp_class")
 
     gp_v_preds, gp_v_vars = vsgp(val_data.tensors[0], full_cov=False)
     plot_roc(val_data.tensors[1][:, 0].cpu().detach(), torch.sigmoid(gp_v_preds.cpu().detach()), "GP")
@@ -118,8 +147,9 @@ def run():
 
     num_x, num_y = 100, 100
     viz_range = 110
-    ps = torch.stack(torch.meshgrid([torch.linspace(-viz_range, viz_range, num_x), torch.linspace(-viz_range, viz_range, num_y)]),
-                     dim=2).reshape(-1, 2)
+    ps = torch.stack(
+        torch.meshgrid([torch.linspace(-viz_range, viz_range, num_x), torch.linspace(-viz_range, viz_range, num_y)]),
+        dim=2).reshape(-1, 2)
     for o in range(4):
         plt.subplot(2, 2, o + 1)
         plt.title(f"Viz: {o + 1}")

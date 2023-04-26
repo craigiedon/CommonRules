@@ -25,7 +25,8 @@ def run():
     scenario, planning_problem_set = CommonRoadFileReader(file_path).open()
 
     # Ford Escort Config. See Commonroad Vehicle Model Documentation
-    lane_centres = [scenario.lanelet_network.find_lanelet_by_id(l).center_vertices[0][1] for l in [6, 10]]
+    all_lane_centres = [scenario.lanelet_network.find_lanelet_by_id(l).center_vertices[0][1] for l in [3, 6, 10]]
+    ego_lane_centres = [scenario.lanelet_network.find_lanelet_by_id(l).center_vertices[0][1] for l in [6, 10]]
 
     goal_state = planning_problem_set.find_planning_problem_by_id(1).goal.state_list[0].position.center
     end_time = 6.0
@@ -39,11 +40,11 @@ def run():
                              v_max=45.8,
                              acc_max=11.5,
                              ang_vel_max=0.4,
-                             lanes=lane_centres,
+                             lanes=ego_lane_centres,
                              lane_targets=[],
                              collision_field_slope=0.80)
 
-    start_state = InitialState(position=np.array([10.0, lane_centres[0]]), velocity=0.0, orientation=0, time_step=0)
+    start_state = InitialState(position=np.array([10.0, ego_lane_centres[0]]), velocity=0.0, orientation=0, time_step=0)
 
     cws = CostWeights(x_prog=0.01, y_prog=0.1, jerk=1, v_track=2, lane_align=1, road_align=1, collision_pot=100,
                       faster_left=1.0, braking=10)
@@ -56,9 +57,9 @@ def run():
     lat_models = [
         lat_model(task_config.dt, kd, 7, p_ref, 0.1, 0.1)
         for kd in np.linspace(3.0, 5.0, 3)
-        for p_ref in lane_centres]
+        for p_ref in all_lane_centres]
 
-    dn_state_list = kalman_receding_horizon(end_time, 2.5, start_state, scenario, task_config, long_models, lat_models,
+    dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.5, start_state, scenario, task_config, long_models, lat_models,
                                             cws)
 
     dyn_obs_shape = Rectangle(width=task_config.car_height, length=task_config.car_width)
@@ -81,9 +82,12 @@ def run():
     rnd = MPRenderer(ax=ax)
     rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
     rnd.draw_params.dynamic_obstacle.show_label = True
-    ani = FuncAnimation(fig, lambda i: animate_kalman_predictions(i, ax, rnd, scenario, obs_tru_long, obs_tru_lat, obs_long_mus, obs_lat_mus, obs_long_preds, obs_lat_preds,
-                                                                  obs_zs_long, obs_zs_lat, False, True),
-                        frames=len(dn_state_list), interval=30, repeat=True, repeat_delay=200)
+    ani = FuncAnimation(fig, lambda i: animate_kalman_predictions(i, ax, rnd, scenario, prediction_stats, False, True),
+                        frames=len(dn_state_list), interval=150, repeat=True, repeat_delay=200)
+
+    ax.set_xlim(0, 150)
+    ax.set_ylim(-5, 5)
+
     plt.tight_layout()
     plt.show()
 

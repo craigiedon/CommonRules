@@ -1,15 +1,18 @@
-from dataclasses import dataclass
+import typing
+from dataclasses import dataclass, field
 from typing import List, Any, Tuple, Optional, Dict
 import matplotlib.pyplot as plt
 import numpy as np
 
 import casadi
+import torch
 from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle, Obstacle
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
+import torch.nn as nn
 
 from immFilter import target_state_prediction, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
     measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_no_obs
@@ -378,36 +381,26 @@ def ll_from_CR_state(obs: Obstacle, start_step: int, end_step: int):
     return ob_long_state, ob_lat_state
 
 
-def initial_longs(obstacles: List[Obstacle], obs_longs: Dict[int, np.ndarray], long_models: List[AffineModel]) -> Dict[
-    int, IMMResult]:
-    i_longs = {}
-    for obs in obstacles:
-        id = obs.obstacle_id
+def initial_long(o: Obstacle, obs_longs: Dict[int, np.ndarray], long_models: List[AffineModel]) -> IMMResult:
+    id = o.obstacle_id
 
-        m_prior = unif_cat_prior(len(long_models))
-        m_mus = np.tile(obs_longs[id][0], (len(long_models), 1))
-        m_covs = np.tile(np.identity(3), (len(long_models), 1, 1))
-        init_res = IMMResult(m_prior, obs_longs[id][0], None, m_mus, m_covs)
+    m_prior = unif_cat_prior(len(long_models))
+    m_mus = np.tile(obs_longs[id][0], (len(long_models), 1))
+    m_covs = np.tile(np.identity(3), (len(long_models), 1, 1))
+    init_res = IMMResult(m_prior, obs_longs[id][0], None, m_mus, m_covs)
 
-        i_longs[id] = init_res
-
-    return i_longs
+    return init_res
 
 
-def initial_lats(obstacles: List[Obstacle], obs_lats: Dict[int, np.ndarray], lat_models: List[AffineModel]) -> Dict[
-    int, IMMResult]:
-    i_lats = {}
-    for obs in obstacles:
-        id = obs.obstacle_id
+def initial_lat(o: Obstacle, obs_lats: Dict[int, np.ndarray], lat_models: List[AffineModel]) -> IMMResult:
+    id = o.obstacle_id
 
-        m_prior = closest_lane_prior(obs_lats[obs.obstacle_id][0, 0], lat_models, 0.9)
-        m_mus = np.tile(obs_lats[obs.obstacle_id][0], (len(lat_models), 1))
-        m_covs = np.tile(np.identity(len(obs_lats[obs.obstacle_id][0])), (len(lat_models), 1, 1))
-        init_res = IMMResult(m_prior, obs_lats[id][0], None, m_mus, m_covs)
+    m_prior = closest_lane_prior(obs_lats[id][0, 0], lat_models, 0.9)
+    m_mus = np.tile(obs_lats[id][0], (len(lat_models), 1))
+    m_covs = np.tile(np.identity(len(obs_lats[id][0])), (len(lat_models), 1, 1))
+    init_res = IMMResult(m_prior, obs_lats[id][0], None, m_mus, m_covs)
 
-        i_lats[id] = init_res
-
-    return i_lats
+    return init_res
 
 
 def identity_observation(o: Obstacle,
@@ -415,13 +408,13 @@ def identity_observation(o: Obstacle,
                          prev_lat_est: np.ndarray,
                          tru_long_state: np.ndarray,
                          tru_lat_state: np.ndarray,
-                         time_step: float) -> Tuple[np.ndarray, np.ndarray]:
+                         dt: float) -> Tuple[np.ndarray, np.ndarray]:
     assert len(tru_long_state) == 3
     assert len(tru_lat_state) == 2
 
     # Longitudinal observation: Position / Velocity
     observed_long_pos = tru_long_state[0]
-    observed_long_vel = (tru_long_state[0] - prev_long_est[0]) / time_step
+    observed_long_vel = (tru_long_state[0] - prev_long_est[0]) / dt
     observed_long_state = np.array([observed_long_pos, observed_long_vel])
 
     # Latitudinal observation: Position
@@ -434,7 +427,7 @@ def bernoulli_drop_observation(o: Obstacle,
                                prev_lat_est: np.ndarray,
                                tru_long_state: np.ndarray,
                                tru_lat_state: np.ndarray,
-                               time_step: float,
+                               dt: float,
                                detection_probability: float) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     r = np.random.rand()
 
@@ -443,7 +436,7 @@ def bernoulli_drop_observation(o: Obstacle,
 
     # Longitudinal observation: Position / Velocity
     observed_long_pos = tru_long_state[0]
-    observed_long_vel = (observed_long_pos - prev_long_est[0]) / time_step
+    observed_long_vel = (observed_long_pos - prev_long_est[0]) / dt
     observed_long_state = np.array([observed_long_pos, observed_long_vel])
 
     # Latitudinal observation: Position
@@ -456,7 +449,7 @@ def toy_drops_noise_observation(o: Obstacle,
                                 prev_lat_est: np.ndarray,
                                 tru_long_state: np.ndarray,
                                 tru_lat_state: np.ndarray,
-                                time_step: float,
+                                dt: float,
                                 detection_probability: float,
                                 noise_var: float) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     r = np.random.rand()
@@ -466,7 +459,11 @@ def toy_drops_noise_observation(o: Obstacle,
 
     # Longitudinal observation: Position / Velocity
     observed_long_pos = tru_long_state[0] + np.random.normal(0.0, noise_var)
-    observed_long_vel = (observed_long_pos - prev_long_est[0]) / time_step
+    # observed_long_vel = (observed_long_pos - prev_long_est[0]) / time_step
+    observed_long_vel = tru_long_state[1]
+    if np.abs(observed_long_vel) > 100:
+        print("Obs long vel:", observed_long_vel)
+    # observed_long_vel = tru_long_state[1]
     observed_long_state = np.array([observed_long_pos, observed_long_vel])
 
     # Latitudinal observation: Position
@@ -474,10 +471,67 @@ def toy_drops_noise_observation(o: Obstacle,
     return observed_long_state, observed_lat_state
 
 
+def pem_observation(o: Obstacle,
+                    t: int,
+                    prev_long_est: np.ndarray,
+                    prev_lat_est: np.ndarray,
+                    tru_long_state: np.ndarray,
+                    tru_lat_state: np.ndarray,
+                    det_pem: nn.Module,
+                    reg_pem: nn.Module,
+                    norm_mus: torch.Tensor,
+                    norm_stds: torch.Tensor,
+                    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    r = np.random.rand()
+
+    det_pem.eval()
+    reg_pem.eval()
+
+    s_xs = tru_long_state[0]
+    s_ys = tru_lat_state[0]
+    s_r = o.state_at_time(t).orientation
+
+    s_dims = [o.obstacle_shape.length, o.obstacle_shape.width, 1.7]
+    s_viz = (4 - 1) / 3.0
+
+    state_tensor = torch.Tensor([s_xs, s_ys, torch.sin(s_r), torch.cos(s_r), s_dims, s_viz])
+    state_tensor = (state_tensor - norm_mus) / norm_stds
+
+    with torch.no_grad():
+        detection_probability = det_pem(state_tensor)
+
+    if r > detection_probability:
+        return None, None
+
+    with torch.no_grad():
+        noise_loc, noise_var = reg_pem(state_tensor, full_cov=True)
+
+    # Longitudinal observation: Position / Velocity
+    observed_long_pos = tru_long_state[0] + np.random.normal(long_noise_loc, long_noise_var)
+    observed_long_vel = tru_long_state[1]
+    observed_long_state = np.array([observed_long_pos, observed_long_vel])
+
+    # Latitudinal observation: Position
+    observed_lat_state = tru_lat_state[0] + np.random.normal(lat_noise_loc, lat_noise_var)
+    return observed_long_state, observed_lat_state
+
+
+@dataclass
+class RecedingHorizonStats:
+    true_longs: List[np.ndarray] = field(default_factory=list)
+    true_lats: List[np.ndarray] = field(default_factory=list)
+    observed_longs: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
+    observed_lats: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
+    est_longs: List[np.ndarray] = field(default_factory=list)
+    est_lats: List[np.ndarray] = field(default_factory=list)
+    prediction_traj_longs: List[np.ndarray] = field(default_factory=list)
+    prediction_traj_lats: List[np.ndarray] = field(default_factory=list)
+
+
 def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
                             task_config: TaskConfig, long_models: List[AffineModel],
                             lat_models: List[StateFeedbackModel],
-                            cws: CostWeights) -> List[CustomState]:
+                            cws: CostWeights) -> Tuple[List[CustomState], Dict[int, RecedingHorizonStats]]:
     T = int(np.round(total_time / task_config.dt))
     res = None
     dn_state_list = []
@@ -486,10 +540,20 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
     obstacle_longs, obstacle_lats = obs_long_lats(scenario.obstacles, 0, T)
 
     # Setup initial state estimation
-    est_long_res = initial_longs(scenario.obstacles, obstacle_longs, long_models)
-    est_lat_res = initial_lats(scenario.obstacles, obstacle_lats, lat_models)
+    est_long_res = {o.obstacle_id: initial_long(o, obstacle_longs, long_models) for o in scenario.obstacles}
+    est_lat_res = {o.obstacle_id: initial_lat(o, obstacle_lats, lat_models) for o in scenario.obstacles}
 
     prediction_steps = int(round(horizon_length / task_config.dt)) - 1
+
+    obs_traj_data: Dict[int, RecedingHorizonStats] = {o.obstacle_id:
+        RecedingHorizonStats(
+            true_longs=[est_long_res[o.obstacle_id].fused_mu],
+            true_lats=[est_lat_res[o.obstacle_id].fused_mu],
+            observed_longs=[None],
+            observed_lats=[None],
+            est_longs=[est_long_res[o.obstacle_id].fused_mu],
+            est_lats=[est_lat_res[o.obstacle_id].fused_mu],
+        ) for o in scenario.obstacles}
 
     for i in range(0, T - 1):
         print(i)
@@ -508,15 +572,15 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                 prev_long_res = est_long_res[obs.obstacle_id]
                 prev_lat_res = est_lat_res[obs.obstacle_id]
 
-                # z_long, z_lat = identity_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu, true_long,
-                #                                      true_lat, task_config.dt)
+                # z_long, z_lat = toy_drops_noise_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu,
+                #                                             true_long,
+                #                                             true_lat, task_config.dt, 0.5, 0.5)
 
-                z_long, z_lat = toy_drops_noise_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu,
-                                                           true_long,
-                                                           true_lat, task_config.dt, 0.5, 0.1)
-
-                # assert np.isclose(z_id_long, true_long[0:2]).all()
-                # assert np.isclose(z_id_lat, true_lat[0]).all()
+                det_pem = torch.load()
+                reg_pem = torch.load()
+                z_long, z_lat = pem_observation(obs, i, prev_long_res.fused_mu, prev_lat_res.fused_mu,
+                                                true_long, true_lat,
+                                                det_pem, reg_pem, norm_mus, norm_stds)
 
                 # One-step IMM Kalman filter
                 if z_long is not None:
@@ -542,6 +606,14 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                                                                      prev_lat_res.model_mus,
                                                                      prev_lat_res.model_covs)
 
+                # Update stats
+                obs_traj_data[obs.obstacle_id].true_lats.append(true_lat)
+                obs_traj_data[obs.obstacle_id].true_longs.append(true_long)
+                obs_traj_data[obs.obstacle_id].observed_longs.append(z_long)
+                obs_traj_data[obs.obstacle_id].observed_lats.append(z_lat)
+                obs_traj_data[obs.obstacle_id].est_longs.append(est_long_res[obs.obstacle_id].fused_mu)
+                obs_traj_data[obs.obstacle_id].est_lats.append(est_lat_res[obs.obstacle_id].fused_mu)
+
             # Predict forward using top mode
             pred_longs = target_state_prediction(est_long_res[obs.obstacle_id].fused_mu, long_models,
                                                  est_long_res[obs.obstacle_id].model_ps, prediction_steps)
@@ -553,6 +625,9 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
             obs_pred_lats[obs.obstacle_id] = np.concatenate(([est_lat_res[obs.obstacle_id].fused_mu], pred_lats),
                                                             axis=0)
 
+            obs_traj_data[obs.obstacle_id].prediction_traj_longs.append(obs_pred_longs[obs.obstacle_id])
+            obs_traj_data[obs.obstacle_id].prediction_traj_lats.append(obs_pred_lats[obs.obstacle_id])
+
         flat_cost = car_mpc(prediction_steps + 1, current_state, task_config,
                             scenario.obstacles, obs_pred_longs, obs_pred_lats, None, None)
         res = car_mpc(prediction_steps + 1, current_state, task_config,
@@ -562,7 +637,17 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                                     acceleration=res.accs[1], time_step=i + 1)
         dn_state_list.append(current_state)
 
-    return dn_state_list
+    for _, td in obs_traj_data.items():
+        assert len(td.prediction_traj_lats) == T - 1
+        assert len(td.prediction_traj_longs) == T - 1
+        assert len(td.true_lats) == T - 1
+        assert len(td.true_longs) == T - 1
+        assert len(td.est_lats) == T - 1
+        assert len(td.est_longs) == T - 1
+        assert len(td.observed_lats) == T - 1
+        assert len(td.observed_longs) == T - 1
+
+    return dn_state_list, obs_traj_data
 
 
 def run():

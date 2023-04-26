@@ -9,6 +9,7 @@ from commonroad.visualization.mp_renderer import MPRenderer
 from matplotlib import animation
 from matplotlib.animation import FuncAnimation
 
+from CarMPC import RecedingHorizonStats
 from immFilter import measure_from_state, c_acc_long_model, DiagFilterConfig, lat_model, target_state_prediction, \
     imm_batch, sticky_m_trans, unif_cat_prior, c_vel_long_model, closest_lane_prior, all_model_predictions
 from trafficRules import rot_mat
@@ -125,19 +126,15 @@ def run():
                         frames=T, interval=30, repeat=True, repeat_delay=200)
     # ani.save("kalmanPredictions.gif", animation.PillowWriter(fps=3))
 
+    ax.set_xlim(0, 250)
+    ax.set_ylim(-5, 5)
+
     plt.tight_layout()
     plt.show()
 
 
 def animate_kalman_predictions(i, ax, rnd: MPRenderer, scenario: Scenario,
-                               obs_tru_long,
-                               obs_tru_lat,
-                               obstacle_long_mus,
-                               obstacle_lat_mus,
-                               obstacle_long_preds,
-                               obstacle_lat_preds,
-                               obs_zs_long,
-                               obs_zs_lat,
+                               p_stats: Dict[int, RecedingHorizonStats],
                                plot_tru_pos: bool = False,
                                plot_obs_pos: bool = False):
     rnd.draw_params.time_begin = i
@@ -145,35 +142,25 @@ def animate_kalman_predictions(i, ax, rnd: MPRenderer, scenario: Scenario,
     scenario.draw(rnd)
     rnd.render()
 
-    for obs in scenario.obstacles:
-        x_longs = np.array(obs_tru_long[obs.obstacle_id])
-        # long_mus, long_covs, mps_long = imm_long_stats[obs.obstacle_id]
-        # x_long_predictions = target_state_prediction(long_mus[i], long_models, mps_long[i], prediction_steps)
-
-        x_lats = np.array(obs_tru_lat[obs.obstacle_id])
-        # lat_mus, lat_covs, mps_lat = imm_lat_stats[obs.obstacle_id]
-
-        # x_lat_predictions = target_state_prediction(lat_mus[i], lat_models, mps_lat[i], prediction_steps)
-        # x_lat_preds_all = all_model_predictions(lat_mus[i], lat_models, prediction_steps)
-
-        z_longs = np.array(obs_zs_long[obs.obstacle_id])
-        z_lats = np.array(obs_zs_lat[obs.obstacle_id])
-
-        # ax.plot(x_longs[max(0, i-5):i, 0], x_lats[max(0, i-5):i, 0], zorder=100)
-        # ax.scatter(z_longs[max(0, i-5):i, 0], z_lats[max(0, i-5):i, 0], zorder=100, s=25, marker='x', alpha=1.0)
+    for o_id, ps in p_stats.items():
+        x_longs = np.array(ps.true_longs)
+        x_lats = np.array(ps.true_lats)
+        z_longs = np.array(ps.observed_longs)
+        z_lats = np.array(ps.observed_lats)
 
         if plot_tru_pos:
             ax.plot(x_longs[:i, 0], x_lats[:i, 0], zorder=100)
 
         if plot_obs_pos:
-            ax.scatter(z_longs[:i, 0], z_lats[:i, 0], zorder=100, s=25, marker='x', alpha=1.0)
+            detected_longs = [zl[0] for zl in z_longs[:i] if zl is not None]
+            detected_lats = [zl for zl in z_lats[:i] if zl is not None]
+            ax.scatter(detected_longs, detected_lats, zorder=100, s=25, marker='x', alpha=1.0)
 
-        ax.plot(obstacle_long_preds[obs.obstacle_id][i, :, 0], obstacle_lat_preds[obs.obstacle_id][i, :, 0],
+        ax.plot(ps.prediction_traj_longs[i][:, 0],
+                ps.prediction_traj_lats[i][:, 0],
                 color='purple', alpha=0.5, zorder=1000)
-        # for mod_pred in x_lat_preds_all:
-        #     ax.plot(x_long_predictions[:, 0], mod_pred[:, 0], color='purple', alpha=0.6, zorder=1000)
-        ax.scatter(obstacle_long_mus[obs.obstacle_id][i, 0], obstacle_lat_mus[obs.obstacle_id][i, 0], color='purple',
-                   zorder=1000)
+
+        ax.scatter(ps.est_longs[i][0], ps.est_lats[i][0], color='purple', zorder=1000)
 
 
 if __name__ == "__main__":
