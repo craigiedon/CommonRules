@@ -14,8 +14,11 @@ from matplotlib import patches, transforms
 from matplotlib.transforms import Affine2D
 import torch.nn as nn
 
+from PyroGPClassification import load_gp_classifier
+from PyroGPRegression import load_gp_reg
 from immFilter import target_state_prediction, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
     measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_no_obs
+from utils import angle_diff, rot_mat
 
 
 @dataclass
@@ -472,6 +475,7 @@ def toy_drops_noise_observation(o: Obstacle,
 
 
 def pem_observation(o: Obstacle,
+                    ego_state: CustomState,
                     t: int,
                     prev_long_est: np.ndarray,
                     prev_lat_est: np.ndarray,
@@ -484,35 +488,37 @@ def pem_observation(o: Obstacle,
                     ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     r = np.random.rand()
 
-    det_pem.eval()
-    reg_pem.eval()
 
-    s_xs = tru_long_state[0]
-    s_ys = tru_lat_state[0]
-    s_r = o.state_at_time(t).orientation
+    # Get the ego vehicle's x,y
+    rot_frame = rot_mat(-ego_state.orientation)
+    ego_pos = ego_state.position
+
+    s_long, s_lat = rot_frame @ [tru_long_state[0] - ego_pos[0], tru_lat_state[0] - ego_pos[1]]
+
+    s_r = torch.tensor(angle_diff(o.state_at_time(t).orientation, ego_state.orientation), dtype=torch.float)
 
     s_dims = [o.obstacle_shape.length, o.obstacle_shape.width, 1.7]
     s_viz = (4 - 1) / 3.0
 
-    state_tensor = torch.Tensor([s_xs, s_ys, torch.sin(s_r), torch.cos(s_r), s_dims, s_viz])
+    state_tensor = torch.Tensor([s_long, s_lat, torch.sin(s_r), torch.cos(s_r), *s_dims, s_viz]).unsqueeze(0)
     state_tensor = (state_tensor - norm_mus) / norm_stds
 
     with torch.no_grad():
-        detection_probability = det_pem(state_tensor)
+        det_p = torch.sigmoid(det_pem(state_tensor)[0])
 
-    if r > detection_probability:
+    if r > det_p:
         return None, None
 
     with torch.no_grad():
-        noise_loc, noise_var = reg_pem(state_tensor, full_cov=True)
+        noise_loc, noise_var = reg_pem(state_tensor)
 
     # Longitudinal observation: Position / Velocity
-    observed_long_pos = tru_long_state[0] + np.random.normal(long_noise_loc, long_noise_var)
+    observed_long_pos = tru_long_state[0] + np.random.normal(noise_loc[0,0], noise_var[0,0])
     observed_long_vel = tru_long_state[1]
     observed_long_state = np.array([observed_long_pos, observed_long_vel])
 
     # Latitudinal observation: Position
-    observed_lat_state = tru_lat_state[0] + np.random.normal(lat_noise_loc, lat_noise_var)
+    observed_lat_state = tru_lat_state[0] + np.random.normal(noise_loc[1,0], noise_var[1,0])
     return observed_long_state, observed_lat_state
 
 
@@ -555,6 +561,13 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
             est_lats=[est_lat_res[o.obstacle_id].fused_mu],
         ) for o in scenario.obstacles}
 
+    det_pem = load_gp_classifier("models/nuscenes/vsgp_class")
+    det_pem.eval()
+    reg_pem = load_gp_reg("models/nuscenes/sgp_reg")
+    reg_pem.eval()
+    norm_mus = torch.load("data/nuscenes/inp_mus.pt")
+    norm_stds = torch.load("data/nuscenes/inp_stds.pt")
+
     for i in range(0, T - 1):
         print(i)
         obs_pred_longs = {}
@@ -576,9 +589,8 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                 #                                             true_long,
                 #                                             true_lat, task_config.dt, 0.5, 0.5)
 
-                det_pem = torch.load()
-                reg_pem = torch.load()
-                z_long, z_lat = pem_observation(obs, i, prev_long_res.fused_mu, prev_lat_res.fused_mu,
+
+                z_long, z_lat = pem_observation(obs, current_state, i, prev_long_res.fused_mu, prev_lat_res.fused_mu,
                                                 true_long, true_lat,
                                                 det_pem, reg_pem, norm_mus, norm_stds)
 

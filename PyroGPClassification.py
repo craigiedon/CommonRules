@@ -64,7 +64,7 @@ def train_gp(vgsp, val_data, num_steps, optimizer, scheduler_step=None):
     return losses, val_losses
 
 
-def save_gp_classifier(folder_path: str, vsgp: gp.models.VariationalSparseGP):
+def save_sparse_gp(folder_path: str, vsgp: gp.models.VariationalSparseGP):
     # Make folder on folder path (re-create if already there)
     os.makedirs(folder_path, exist_ok=True)
 
@@ -76,15 +76,27 @@ def save_gp_classifier(folder_path: str, vsgp: gp.models.VariationalSparseGP):
     torch.save(vsgp.kernel, os.path.join(folder_path, "kernel.pt"))
 
 
-def load_gp_classifier(folder_path):
+def load_gp_classifier(folder_path: str, cuda=False) -> gp.models.VariationalSparseGP:
     train_ins = torch.load(os.path.join(folder_path, "train_ins.pt"))
     train_labels = torch.load(os.path.join(folder_path, "train_labels.pt"))
     Xu = torch.load(os.path.join(folder_path, "inducing_points.pt"))
     kernel = torch.load(os.path.join(folder_path, "kernel.pt"))
 
     vsgp = gp.models.VariationalSparseGP(train_ins, train_labels, kernel, Xu, gp.likelihoods.Binary(),
-                                         jitter=1e-03).cuda()
+                                         jitter=1e-03)
     vsgp.load_state_dict(torch.load(os.path.join(folder_path, "state_dict.pt")))
+
+    if cuda:
+        vsgp = vsgp.cuda()
+        vsgp.X = vsgp.X.cuda()
+        vsgp.y = vsgp.y.cuda()
+        vsgp.Xu = vsgp.Xu.cuda()
+    else:
+        vsgp = vsgp.cpu()
+        vsgp.X = vsgp.X.cpu()
+        vsgp.y = vsgp.y.cpu()
+        vsgp.Xu = vsgp.Xu.cpu()
+
     return vsgp
 
 
@@ -134,7 +146,7 @@ def run():
     # torch.save(vsgp.state_dict(), f"models/nuscenes/vsgp_class_i{len(Xu)}.pt")
     # vsgp.load_state_dict(torch.load(f"models/nuscenes/vsgp_class_i{len(Xu)}.pt"))
 
-    save_gp_classifier(f"models/nuscenes/vsgp_class", vsgp)
+    save_sparse_gp(f"models/nuscenes/vsgp_class", vsgp)
 
     vsgp = load_gp_classifier(f"models/nuscenes/vsgp_class")
 

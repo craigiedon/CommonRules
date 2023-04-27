@@ -21,12 +21,36 @@ from torch.utils.data import TensorDataset
 
 from NuScenesAnalysis import load_nuscenes_salient, norm_saved
 from PlotSalientData import plot_roc
+from PyroGPClassification import save_sparse_gp
 
 
 def plot_loss(loss):
     plt.plot(loss)
     plt.xlabel("iterations")
     _ = plt.ylabel("Loss")
+
+
+def load_gp_reg(folder_path: str, cuda=False) -> gp.models.SparseGPRegression:
+    train_ins = torch.load(os.path.join(folder_path, "train_ins.pt"))
+    train_labels = torch.load(os.path.join(folder_path, "train_labels.pt"))
+    Xu = torch.load(os.path.join(folder_path, "inducing_points.pt"))
+    kernel = torch.load(os.path.join(folder_path, "kernel.pt"))
+
+    vsgp = gp.models.SparseGPRegression(train_ins, train_labels, kernel, Xu, jitter=1e-03).cuda()
+    vsgp.load_state_dict(torch.load(os.path.join(folder_path, "state_dict.pt")))
+
+    if cuda:
+        vsgp = vsgp.cuda()
+        vsgp.X = vsgp.X.cuda()
+        vsgp.y = vsgp.y.cuda()
+        vsgp.Xu = vsgp.Xu.cuda()
+    else:
+        vsgp = vsgp.cpu()
+        vsgp.X = vsgp.X.cpu()
+        vsgp.y = vsgp.y.cpu()
+        vsgp.Xu = vsgp.Xu.cpu()
+
+    return vsgp
 
 
 def train_gp(vgsp, val_data, num_steps, optimizer, scheduler_step=None):
@@ -56,7 +80,8 @@ def train_gp(vgsp, val_data, num_steps, optimizer, scheduler_step=None):
 
         with torch.no_grad():
             gp_v_preds, gp_v_vars = vgsp(val_data.tensors[0], full_cov=False)
-            val_loss = torch.nn.functional.gaussian_nll_loss(gp_v_preds.T, val_data.tensors[1][:, [1,2]], gp_v_vars.T, full=True)
+            val_loss = torch.nn.functional.gaussian_nll_loss(gp_v_preds.T, val_data.tensors[1][:, [1, 2]], gp_v_vars.T,
+                                                             full=True)
             print(f"V: {val_loss.item():.3f}")
             val_losses.append(torch_item(val_loss))
 
@@ -86,23 +111,27 @@ def run():
     Xu = train_data.tensors[0][::50]
 
     vsgp = gp.models.SparseGPRegression(train_data.tensors[0][:subset],
-                                         train_data.tensors[1][:subset, [1,2]].T, # Error in the x/y coordinates
-                                         kernel,
-                                         Xu=Xu,
-                                         jitter=1e-05).cuda()
+                                        train_data.tensors[1][:subset, [1, 2]].T,  # Error in the x/y coordinates
+                                        kernel,
+                                        Xu=Xu,
+                                        jitter=1e-05).cuda()
 
-    elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=400,
-                      optimizer=torch.optim.AdamW(vsgp.parameters()),
-                      scheduler_step=None)
+    # # elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=400,
+    # #                                    optimizer=torch.optim.AdamW(vsgp.parameters()),
+    # #                                    scheduler_step=None)
+    #
+    # plot_loss(elbo_losses)
+    # plt.show()
+    #
+    # plot_loss(val_losses)
+    # plt.show()
 
-    plot_loss(elbo_losses)
-    plt.show()
+    model_folder = f"models/nuscenes/sgp_reg"
+    # save_sparse_gp(model_folder, vsgp)
+    vsgp = load_gp_reg(model_folder)
 
-    plot_loss(val_losses)
-    plt.show()
-
-    torch.save(vsgp.state_dict(), f"models/nuscenes/sgp_reg_i{len(Xu)}.pt")
-    vsgp.load_state_dict(torch.load(f"models/nuscenes/sgp_reg_i{len(Xu)}.pt"))
+    # torch.save(vsgp.state_dict(), f"models/nuscenes/sgp_reg_i{len(Xu)}.pt")
+    # vsgp.load_state_dict(torch.load(f"models/nuscenes/sgp_reg_i{len(Xu)}.pt"))
 
     gp_v_preds, gp_v_vars = vsgp(val_data.tensors[0], full_cov=True)
 
@@ -116,13 +145,14 @@ def run():
 
     num_x, num_y = 50, 50
     viz_range = 200
-    ps = torch.stack(torch.meshgrid([torch.linspace(-viz_range, viz_range, num_x), torch.linspace(-viz_range, viz_range, num_y)]),
-                     dim=2).reshape(-1, 2)
+    ps = torch.stack(
+        torch.meshgrid([torch.linspace(-viz_range, viz_range, num_x), torch.linspace(-viz_range, viz_range, num_y)]),
+        dim=2).reshape(-1, 2)
     for o in range(4):
         plt.subplot(2, 2, o + 1)
         plt.title(f"Viz: {o + 1}")
 
-        ev_rot = torch.full((len(ps),), np.pi / 2.0)# np.pi / 2.0)
+        ev_rot = torch.full((len(ps),), np.pi / 2.0)  # np.pi / 2.0)
         ev_dims = torch.tensor([4.6, 1.9, 1.7]).repeat(len(ps), 1)
         ev_occ = torch.tensor(o).repeat(len(ps)) / 3.0
 
@@ -133,12 +163,15 @@ def run():
             z_mus, z_vars = vsgp(eval_xs.cuda(), full_cov=False)
         # z_preds = torch.sigmoid(z_preds.reshape(num_x, num_y))
         # z_preds = z_preds.T.reshape(num_x, num_y, 2)
+        # z_mus = (z_mus.reshape(num_x, num_y, 2) ** 2).sum(dim=2).sqrt()
+        z_mus = z_mus.reshape(num_x, num_y, 2)
         z_vars = z_vars.T.reshape(num_x, num_y, 2).sum(dim=2)
         print(f"Viz: {o}", z_vars.sum())
 
         p_grid = ps.reshape(num_x, num_y, 2)
 
-        plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_vars.cpu().detach(), vmin=0.0, vmax=1.5)
+        plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_vars.cpu().detach(), vmin=0.0)
+        # plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_mus[:, :, 1].cpu().detach())
         plt.colorbar()
 
     plt.show()
