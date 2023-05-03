@@ -8,7 +8,7 @@ from commonroad.common.file_reader import CommonRoadFileReader
 
 from stl import stl_rob, STLExp
 from trafficRules import safe_dist_rule, no_unnecessary_braking_rule, keeps_speed_limit_rule, traffic_flow_rule, \
-    interstate_stopping_rule, faster_than_left_rule, consider_entering_vehicles_rule
+    interstate_stopping_rule, faster_than_left_rule, consider_entering_vehicles_rule, safe_dist_rule_multi
 from utils import animate_scenario, animate_scenario_and_monitor
 
 file_path = "scenarios/Complex_Solution.xml"
@@ -46,8 +46,10 @@ faster_diff_thresh = 5.55
 
 # TODO: Redo this as a combined rule?
 rg_1s = [safe_dist_rule(ego_car, other_car, lane_centres, lane_widths, acc_min, reaction_time, t_cut_in) for other_car in obstacles]
+rg_1 = safe_dist_rule_multi(ego_car, obstacles, lane_centres, lane_widths, acc_min, reaction_time, t_cut_in)
 
 rule_dict: Dict[str, STLExp] = {
+    "rg_1": rg_1,
     "rg_2": no_unnecessary_braking_rule(ego_car, obstacles, lane_centres, lane_widths, a_abrupt, acc_min, reaction_time),
     "rg_3": keeps_speed_limit_rule(ego_car, max_vel),
     "rg_4": traffic_flow_rule(ego_car, obstacles, lane_centres, lane_widths, max_vel, slow_delta) ,
@@ -59,12 +61,13 @@ rule_dict: Dict[str, STLExp] = {
 
 for rule_name, rule in rule_dict.items():
     start_time = time.time()
-    rob_vals = [stl_rob(rule, state_dict[:i], 0) for i in range(1, len(state_dict))]
-    print(f"{rule_name}: {rob_vals[-1]}")
+    # rob_vals = [stl_rob(rule, state_dict[:i], 0) for i in range(1, len(state_dict))]
+    rob_val = stl_rob(rule, state_dict, 0)
+    print(f"{rule_name}: {rob_val}")
     print(f"Function took: {time.time() - start_time} secs")
 
-    with open(f"results/{rule_name}.json", "w") as f:
-        json.dump(rob_vals, f)
+    # with open(f"results/{rule_name}.json", "w") as f:
+    #     json.dump(rob_vals, f)
 
 
 # ob_rob_vs = {}

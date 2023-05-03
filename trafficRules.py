@@ -342,38 +342,57 @@ def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[fl
                        in_front_of(other_car, ego_car)])
     cutting_behaviour = Neg(O(
         And([cut_in(ego_car, other_car, lane_centres, lane_widths),
-             H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 1)
+             H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 2)
              ]), 0, t_cut_in))
     lhs = And([positioning, cutting_behaviour])
+    # lhs = positioning
 
     rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
-    return G(Implies(lhs, rhs), 0, 1000)
+    return G(Implies(lhs, rhs), 0, np.inf)
+
+
+def safe_dist_rule_multi(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
+                         acc_min: float, reaction_time: float, t_cut_in: int):
+    safe_dist_conds = []
+    for other_car in other_cars:
+        positioning = And([in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+                           in_front_of(other_car, ego_car)])
+        cutting_behaviour = Neg(O(
+            And([cut_in(ego_car, other_car, lane_centres, lane_widths),
+                 H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 2)
+                 ]), 0, t_cut_in))
+        lhs = And([positioning, cutting_behaviour])
+
+        rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
+        safe_dist_conds.append(G(Implies(lhs, rhs), 0, np.inf))
+
+    return And(safe_dist_conds)
 
 
 def no_unnecessary_braking_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float],
                                 lane_widths: float,
                                 a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
     return G(Neg(unnecessary_braking(ego_car, other_cars, lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)),
-             0, 1000)
+             0, np.inf)
 
 
 def keeps_speed_limit_rule(ego_car: Obstacle, max_vel: float) -> STLExp:
     def f(s: Dict[int, KSState]) -> float:
         return s[ego_car.obstacle_id].velocity
 
-    return G(LEQc(f, max_vel), 0, 1000)
+    return G(LEQc(f, max_vel), 0, np.inf)
 
 
 def traffic_flow_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres, lane_widths, speed_limit: float,
                       slow_delta: float) -> STLExp:
     return G(Implies(Neg(slow_leading_vehicle(ego_car, other_cars, lane_centres, lane_widths, speed_limit, slow_delta)),
-                     preserves_flow(ego_car, speed_limit, slow_delta)), 0, 1000)
+                     preserves_flow(ego_car, speed_limit, slow_delta)), 0, np.inf)
 
 
 def interstate_stopping_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres, lane_widths, error_bound):
     return G(Implies(
         Neg(exist_standing_leading_vehicle(ego_car, other_cars, lane_centres, lane_widths, error_bound)),
-        Neg(in_standstill(ego_car, error_bound))), 0, 1000)
+        Neg(in_standstill(ego_car, error_bound))), 0, np.inf)
 
 
 def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float], access_cs: List[float],
@@ -398,7 +417,7 @@ def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float]
         ])
         faster_left_cars.append(Implies(lhs, Or([faster_than_blocked, access_ramp_exempt])))
 
-    return G(And(faster_left_cars), 0, 1000)
+    return G(And(faster_left_cars), 0, np.inf)
 
 
 # def consider_entering_vehicles_rule_old(ego_car: Obstacle, other_cars: List[Obstacle], main_cw_cs: List[float],
@@ -409,15 +428,15 @@ def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float]
 #             on_main_carriageway(ego_car, main_cw_cs, lane_widths),
 #             in_front_of(other_car, ego_car),
 #             on_access_ramp(other_car, access_cs, lane_widths),
-#             F(on_main_carriageway(other_car, main_cw_cs, lane_widths), 0, 1000)])
+#             F(on_main_carriageway(other_car, main_cw_cs, lane_widths), 0, np.inf)])
 #
 #         rhs = Neg(And([
 #             Neg(in_lane(ego_car, min(main_cw_cs), lane_widths)),
-#             F(in_lane(ego_car, min(main_cw_cs), lane_widths), 1, 1000)
+#             F(in_lane(ego_car, min(main_cw_cs), lane_widths), 1, np.inf)
 #         ]))
 #
 #         access_considerations.append(Implies(lhs, rhs))
-#     return G(And(access_considerations), 0, 1000)
+#     return G(And(access_considerations), 0, np.inf)
 
 
 def consider_entering_vehicles_rule(ego_car: Obstacle, other_cars: List[Obstacle], main_cw_cs: List[float],
@@ -431,17 +450,17 @@ def consider_entering_vehicles_rule(ego_car: Obstacle, other_cars: List[Obstacle
             in_front_of(other_car, ego_car),
             on_access_ramp(other_car, access_cs, lane_widths),
             F(And([on_main_carriageway(other_car, main_cw_cs, lane_widths),
-                   Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, 1000)
+                   Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, np.inf)
         ])
 
         rhs = U(Neg(in_lane(ego_car, rh_lane, lane_widths)),
                 And([
                     on_main_carriageway(other_car, main_cw_cs, lane_widths),
                     Neg(on_access_ramp(other_car, access_cs, lane_widths))
-                ]), 0, 1000)
+                ]), 0, np.inf)
 
         access_considerations.append(Implies(lhs, rhs))
-    return G(And(access_considerations), 0, 1000)
+    return G(And(access_considerations), 0, np.inf)
 
 
 def run():

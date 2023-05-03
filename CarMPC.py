@@ -1,3 +1,4 @@
+import time
 import typing
 from dataclasses import dataclass, field
 from typing import List, Any, Tuple, Optional, Dict
@@ -5,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import casadi
+import pyro
 import torch
 from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle, Obstacle
 from commonroad.scenario.scenario import Scenario
@@ -16,6 +18,7 @@ import torch.nn as nn
 
 from PyroGPClassification import load_gp_classifier
 from PyroGPRegression import load_gp_reg
+from Raycasting import ray_intersect, radial_ray_batch, occlusions_from_ray_hits
 from immFilter import target_state_prediction, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
     measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_no_obs
 from utils import angle_diff, rot_mat
@@ -485,9 +488,9 @@ def pem_observation(o: Obstacle,
                     reg_pem: nn.Module,
                     norm_mus: torch.Tensor,
                     norm_stds: torch.Tensor,
+                    o_viz: float,
                     ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     r = np.random.rand()
-
 
     # Get the ego vehicle's x,y
     rot_frame = rot_mat(-ego_state.orientation)
@@ -498,27 +501,105 @@ def pem_observation(o: Obstacle,
     s_r = torch.tensor(angle_diff(o.state_at_time(t).orientation, ego_state.orientation), dtype=torch.float)
 
     s_dims = [o.obstacle_shape.length, o.obstacle_shape.width, 1.7]
-    s_viz = (4 - 1) / 3.0
+    # s_viz = (4 - 1) / 3.0
 
-    state_tensor = torch.Tensor([s_long, s_lat, torch.sin(s_r), torch.cos(s_r), *s_dims, s_viz]).unsqueeze(0)
+    state_tensor = torch.Tensor([s_long, s_lat, torch.sin(s_r), torch.cos(s_r), *s_dims, o_viz]).unsqueeze(0)
     state_tensor = (state_tensor - norm_mus) / norm_stds
+    state_tensor = state_tensor.cuda()
+
+    p_store = pyro.get_param_store()
 
     with torch.no_grad():
+        pyro.get_param_store().clear()
         det_p = torch.sigmoid(det_pem(state_tensor)[0])
+
+    p_store.clear()
 
     if r > det_p:
         return None, None
 
+    pem_start = time.time()
     with torch.no_grad():
+        pyro.get_param_store().clear()
         noise_loc, noise_var = reg_pem(state_tensor)
+        noise_loc = noise_loc.cpu().detach()
+        noise_var = noise_var.cpu().detach()
 
     # Longitudinal observation: Position / Velocity
-    observed_long_pos = tru_long_state[0] + np.random.normal(noise_loc[0,0], noise_var[0,0])
+    observed_long_pos = tru_long_state[0] + np.random.normal(noise_loc[0, 0], noise_var[0, 0])
     observed_long_vel = tru_long_state[1]
     observed_long_state = np.array([observed_long_pos, observed_long_vel])
 
     # Latitudinal observation: Position
-    observed_lat_state = tru_lat_state[0] + np.random.normal(noise_loc[1,0], noise_var[1,0])
+    observed_lat_state = tru_lat_state[0] + np.random.normal(noise_loc[1, 0], noise_var[1, 0])
+
+    return observed_long_state, observed_lat_state
+
+
+def pem_observation_batch(obs: List[Obstacle],
+                          ego_state: CustomState,
+                          t: int,
+                          tru_long_states: np.ndarray,
+                          tru_lat_states: np.ndarray,
+                          det_pem: nn.Module,
+                          reg_pem: nn.Module,
+                          norm_mus: torch.Tensor,
+                          norm_stds: torch.Tensor,
+                          o_viz: np.ndarray,
+                          ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    # Get the ego vehicle's x,y
+    rot_frame = rot_mat(-ego_state.orientation)
+    ego_pos = ego_state.position
+
+    obs_offsets = np.array([tru_long_states[:, 0] - ego_pos[0], tru_lat_states[:, 0] - ego_pos[1]])
+    s_longs, s_lats = rot_frame @ np.array([tru_long_states[:, 0] - ego_pos[0], tru_lat_states[:, 0] - ego_pos[1]])
+
+    obs_rots = np.array([o.state_at_time(t).orientation for o in obs])
+    s_rs = torch.tensor(angle_diff(obs_rots, ego_state.orientation), dtype=torch.float)
+
+    s_dims = torch.tensor([[o.obstacle_shape.length, o.obstacle_shape.width, 1.7] for o in obs], dtype=torch.float)
+    # s_dims = [o.obstacle_shape.length, o.obstacle_shape.width, 1.7]
+    # s_viz = (4 - 1) / 3.0
+
+    state_tensor = torch.column_stack([torch.tensor(s_longs, dtype=torch.float),
+                                       torch.tensor(s_lats, dtype=torch.float),
+                                       torch.sin(s_rs),
+                                       torch.cos(s_rs),
+                                       s_dims,
+                                       torch.tensor(o_viz, dtype=torch.float)])
+    state_tensor = (state_tensor - norm_mus) / norm_stds
+    state_tensor = state_tensor.cuda()
+
+    p_store = pyro.get_param_store()
+
+    with torch.no_grad():
+        pyro.get_param_store().clear()
+        det_ps = torch.sigmoid(det_pem(state_tensor)[0])
+        det_ps = det_ps.cpu().detach().numpy()
+
+    p_store.clear()
+
+    # if r > det_p:
+    #     return None, None
+
+    with torch.no_grad():
+        pyro.get_param_store().clear()
+        noise_locs, noise_vars = reg_pem(state_tensor)
+        noise_loc = noise_locs.cpu().detach()
+        noise_var = noise_vars.cpu().detach()
+
+    # Longitudinal observation: Position / Velocity
+    observed_long_pos = tru_long_states[:, 0] + np.random.normal(noise_loc[0, :], noise_var[0, :])
+    observed_long_vel = tru_long_states[:, 1]
+    observed_long_state = np.array([observed_long_pos, observed_long_vel]).T
+
+    # Latitudinal observation: Position
+    observed_lat_state = tru_lat_states[:, 0] + np.random.normal(noise_loc[1, :], noise_var[1, :])
+
+    rands = np.random.rand(len(obs))
+    observed_long_state = [s if r < det_p else None for s, r, det_p in zip(observed_long_state, rands, det_ps)]
+    observed_lat_state = [s if r < det_p else None for s, r, det_p in zip(observed_lat_state, rands, det_ps)]
+
     return observed_long_state, observed_lat_state
 
 
@@ -534,9 +615,40 @@ class RecedingHorizonStats:
     prediction_traj_lats: List[np.ndarray] = field(default_factory=list)
 
 
+def get_corners(pos: np.ndarray, rot: float, length: float, width: float) -> np.ndarray:
+    rm = rot_mat(rot)
+    raw_corners = np.array([
+        [-length / 2.0, -width / 2.0],
+        [-length / 2.0, width / 2.0],
+        [length / 2.0, width / 2.0],
+        [length / 2.0, -width / 2.0]
+    ])
+
+    rotated_corners = (rm @ raw_corners.T).T
+    corners = rotated_corners + pos
+    return corners
+
+
+def car_visibilities_raycast(n_rays: int, current_state: CustomState, i: int, obstacles: List[Obstacle]) -> np.ndarray:
+    rays = radial_ray_batch(current_state.position, n_rays)
+    obs_corners = {o.obstacle_id: get_corners(o.state_at_time(i).position, o.state_at_time(i).orientation,
+                                              o.obstacle_shape.length, o.obstacle_shape.width) for o in obstacles}
+    obs_ray_results = {o_id: ray_intersect(rays.origins, rays.dirs, oc) for o_id, oc in obs_corners.items()}
+
+    obs_viz = {}
+    visibilities = []
+    for target_id, target_res in obs_ray_results.items():
+        occs_res = [o_res for occ_id, o_res in obs_ray_results.items() if occ_id != target_id]
+        viz, _, _ = occlusions_from_ray_hits(target_res, occs_res)
+        obs_viz[target_id] = viz
+        visibilities.append(viz)
+
+    return np.array(visibilities)
+
+
 def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
                             task_config: TaskConfig, long_models: List[AffineModel],
-                            lat_models: List[StateFeedbackModel],
+                            lat_models: List[StateFeedbackModel], observation_func: typing.Callable,
                             cws: CostWeights) -> Tuple[List[CustomState], Dict[int, RecedingHorizonStats]]:
     T = int(np.round(total_time / task_config.dt))
     res = None
@@ -561,38 +673,34 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
             est_lats=[est_lat_res[o.obstacle_id].fused_mu],
         ) for o in scenario.obstacles}
 
-    det_pem = load_gp_classifier("models/nuscenes/vsgp_class")
-    det_pem.eval()
-    reg_pem = load_gp_reg("models/nuscenes/sgp_reg")
-    reg_pem.eval()
-    norm_mus = torch.load("data/nuscenes/inp_mus.pt")
-    norm_stds = torch.load("data/nuscenes/inp_stds.pt")
-
     for i in range(0, T - 1):
-        print(i)
+        # loop_time = time.time()
+        # print(i)
         obs_pred_longs = {}
         obs_pred_lats = {}
-        for obs in scenario.obstacles:
+
+        # Calculating Visibilities from Raycasts
+        visibilities = car_visibilities_raycast(100, current_state, i, scenario.obstacles)
+
+        tru_long_states = np.array(list(obstacle_longs.values()))
+        tru_lat_states = np.array(list(obstacle_lats.values()))
+
+        z_longs, z_lats = observation_func(scenario.obstacles, current_state, i, tru_long_states[:, i], tru_lat_states[:, i], visibilities)
+
+        for obs_n, obs in enumerate(scenario.obstacles):
             # At i = 0, we don't take a measurement, assume we start correct:
             if i > 0:
                 # Get the current state of each obstacle
                 true_long, true_lat = obstacle_longs[obs.obstacle_id][i], obstacle_lats[obs.obstacle_id][i]
 
-                # Get its measurement
-                # z_long = measure_from_state(true_long, long_models[0])
-                # z_lat = measure_from_state(true_lat, lat_models[0])
-
                 prev_long_res = est_long_res[obs.obstacle_id]
                 prev_lat_res = est_lat_res[obs.obstacle_id]
 
-                # z_long, z_lat = toy_drops_noise_observation(obs, prev_long_res.fused_mu, prev_lat_res.fused_mu,
-                #                                             true_long,
-                #                                             true_lat, task_config.dt, 0.5, 0.5)
-
-
-                z_long, z_lat = pem_observation(obs, current_state, i, prev_long_res.fused_mu, prev_lat_res.fused_mu,
-                                                true_long, true_lat,
-                                                det_pem, reg_pem, norm_mus, norm_stds)
+                # Get its measurement
+                # z_long, z_lat = pem_observation(obs, current_state, i, prev_long_res.fused_mu, prev_lat_res.fused_mu,
+                #                                 true_long, true_lat,
+                #                                 det_pem, reg_pem, norm_mus, norm_stds, obs_viz[obs.obstacle_id])
+                z_long, z_lat = z_longs[obs_n], z_lats[obs_n]
 
                 # One-step IMM Kalman filter
                 if z_long is not None:
@@ -640,10 +748,8 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
             obs_traj_data[obs.obstacle_id].prediction_traj_longs.append(obs_pred_longs[obs.obstacle_id])
             obs_traj_data[obs.obstacle_id].prediction_traj_lats.append(obs_pred_lats[obs.obstacle_id])
 
-        flat_cost = car_mpc(prediction_steps + 1, current_state, task_config,
-                            scenario.obstacles, obs_pred_longs, obs_pred_lats, None, None)
         res = car_mpc(prediction_steps + 1, current_state, task_config,
-                      scenario.obstacles, obs_pred_longs, obs_pred_lats, cws, flat_cost)
+                      scenario.obstacles, obs_pred_longs, obs_pred_lats, cws, res)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i + 1)

@@ -1,7 +1,8 @@
 import abc
 import dataclasses
+from collections import deque
 from dataclasses import dataclass
-from typing import Callable, Any, List, Optional
+from typing import Callable, Any, List, Optional, Union, Tuple
 import numpy as np
 from scipy.special import logsumexp
 
@@ -120,81 +121,308 @@ def remove_nones(x: List) -> List:
     return list(filter(lambda v: v is not None, x))
 
 
-def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
+def comp_sat_tru(x) -> np.ndarray:
+    return np.full(len(x), np.inf)
+
+
+def comp_sat_compare(spec: Union[LEQ0, GEQ0], xs) -> np.ndarray:
+    match spec:
+        case LEQ0(f):
+            return -np.array([f(x) for x in xs])
+        case GEQ0(f):
+            return np.array([f(x) for x in xs])
+
+
+def comp_sat_neg(x) -> np.ndarray:
+    return -x
+
+
+def comp_sat_compose(spec: Union[Or, And], xs: List[np.ndarray]) -> np.ndarray:
+    match spec:
+        case Or(_):
+            return np.max(xs, axis=0)
+        case And(_):
+            return np.min(xs, axis=0)
+
+
+def comp_sat_and(xs: List[np.ndarray]) -> np.ndarray:
+    return np.min(xs, dim=1)
+
+
+def lemire_min_max(xs: np.ndarray, width: int) -> Tuple[np.ndarray, np.ndarray]:
+    assert 0 < width < len(xs)
+    U = deque([0])
+    L = deque([0])
+
+    window_mins = []
+    window_maxs = []
+
+    for i in range(1, len(xs)):
+        if i >= width:
+            window_maxs.append(xs[U[-1]])
+            window_mins.append(xs[L[-1]])
+
+        if xs[i] > xs[i - 1]:
+            U.popleft()
+            while len(U) > 0 and xs[i] > xs[U[0]]:
+                U.popleft()
+        else:
+            L.popleft()
+            while len(L) > 0 and xs[i] < xs[L[0]]:
+                L.popleft()
+
+        U.appendleft(i)
+        L.appendleft(i)
+
+        if i == width + U[-1]:
+            U.pop()
+        elif i == width + L[-1]:
+            L.pop()
+
+    # window_maxs.append(xs[U[-1]])
+    # window_mins.append(xs[L[-1]])
+
+    p_w_mins = np.pad(np.array(window_mins), (0, len(xs) - len(window_mins)), mode='edge')
+    p_w_maxs = np.pad(np.array(window_maxs), (0, len(xs) - len(window_maxs)), mode='edge')
+    return p_w_mins, p_w_maxs
+
+
+def comp_sat_eventually(a, b, x: np.ndarray) -> np.ndarray:
+    assert 0 <= a <= b, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded Eventually
+    if a == 0 and np.isinf(b):
+        return np.fmax.accumulate(x[::-1])[::-1]
+    elif a > 0 and np.isinf(b):
+        padded = np.pad(x, (0, a), mode='edge')
+        unshifted = np.fmax.accumulate(padded[::-1])[::-1]
+        return unshifted[a:]
+    # Bounded Eventually
+    elif np.isfinite(b):
+        if a == b:
+            w_maxs = np.pad(x, (0, a), mode='edge')[a:]
+        else:
+            _, w_maxs = lemire_min_max(np.pad(x, (0, a), mode='edge')[a:], b - a)
+        return w_maxs
+
+
+def comp_sat_once(a, b, x: np.ndarray) -> np.ndarray:
+    assert 0 <= a <= b, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded Once
+    if a == 0 and np.isinf(b):
+        return np.fmax.accumulate(x)
+    elif a > 0 and np.isinf(b):
+        padded = np.pad(x, (a, 0), mode='edge')
+        unshifted = np.fmax.accumulate(padded)
+        return unshifted[:-a]
+    # Bounded Once
+    elif np.isfinite(b):
+        # Note: Have to account for accidentally slicing with a zero
+        if a == 0:
+            pad_shift = x
+        else:
+            pad_shift = np.pad(x, (a, 0), mode='edge')[:-a]
+
+        if a == b:
+            w_maxs = pad_shift
+        else:
+            w_maxs = lemire_min_max(pad_shift[::-1], b - a)[1][::-1]
+
+        return w_maxs
+
+
+def comp_sat_history(a, b, x: np.ndarray) -> np.ndarray:
+    assert 0 <= a <= b, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded History
+    if a == 0 and np.isinf(b):
+        return np.fmin.accumulate(x)
+    elif a > 0 and np.isinf(b):
+        padded = np.pad(x, (a, 0), mode='edge')
+        unshifted = np.fmin.accumulate(padded)
+        return unshifted[:-a]
+    # Bounded Once
+    elif np.isfinite(b):
+        if a == 0:
+            pad_shift = x
+        else:
+            pad_shift = np.pad(x, (a, 0), mode='edge')[:-a]
+
+        if a == b:
+            w_mins = pad_shift
+        else:
+            w_mins = lemire_min_max(pad_shift[::-1], b - a)[0][::-1]
+
+        return w_mins
+
+
+def comp_sat_always(a, b, x: np.ndarray) -> np.ndarray:
+    assert 0 <= a <= b, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded Always
+    if a == 0 and np.isinf(b):
+        return np.fmin.accumulate(x[::-1])[::-1]
+    elif a > 0 and np.isinf(b):
+        padded = np.pad(x, (0, a), mode='edge')
+        unshifted = np.fmin.accumulate(padded[::-1])[::-1]
+        return unshifted[a:]
+    # Bounded Eventually
+    elif np.isfinite(b):
+        if a == b:
+            w_mins = np.pad(x, (0, a), mode='edge')[a:]
+        else:
+            w_mins, _ = lemire_min_max(np.pad(x, (0, a), mode='edge'), b - a)
+        return w_mins
+
+
+def comp_sat_until(a, b, w_left, w_right) -> np.ndarray:
+    assert 0 <= a < b and b > 0, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded Until
+    if a == 0 and np.isinf(b):
+        ys = np.zeros(len(w_left))
+        worst_ws = np.fmin(w_left, w_right)
+        ys[-1] = worst_ws[-1]
+        for i in reversed(range(0, len(ys) - 1)):
+            ys[i] = np.fmax(worst_ws[i], np.fmin(w_left[i], ys[i + 1]))
+        return ys
+    elif a > 0 and np.isfinite(b):
+        w1 = comp_sat_until(0, np.inf, w_left, w_right)
+        w2 = comp_sat_always(0, a, w1)
+        w3 = comp_sat_eventually(a, b, w_right)
+        return comp_sat_and([w2, w3])
+
+
+def comp_sat_since(a, b, w_left, w_right) -> np.ndarray:
+    assert 0 <= a < b and b > 0, f"Invalid interval bounds [{a}, {b}]"
+    # Unbounded Since
+    if a == 0 and np.isinf(b):
+        worst_ws = np.fmin(w_left, w_right)
+        ys = np.zeros(len(w_left))
+        ys[0] = worst_ws[0]
+        for i in range(1, len(ys)):
+            ys[i] = np.fmax(worst_ws[i], np.fmin(w_left[i], ys[i - 1]))
+        return ys
+    # Bounded Since
+    elif a > 0 and np.isfinite(b):
+        w1 = comp_sat_since(0, np.inf, w_left, w_right)
+        w2 = comp_sat_history(0, a, w1)
+        w3 = comp_sat_once(a, b, w_right)
+        return comp_sat_and([w2, w3])
+
+
+def stl_rob(spec: STLExp, x: Any, t: int) -> float:
+    return stl_monitor_fast(spec, x)[t]
+
+
+def stl_monitor_fast(spec: STLExp, x: Any):
     match spec:
         case Tru():
-            return np.inf
-        case GEQ0(f):
-            return f(x[t])
-        case LEQ0(f):
-            return -f(x[t])
+            return comp_sat_tru(x)
+        case GEQ0(_) | LEQ0(_):
+            return comp_sat_compare(spec, x)
         case Neg(e):
-            return -stl_rob(e, x, t)
-        case And(exps):
-            rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
-            if len(rob_vals) == 0:
-                return None
-            return np.min(rob_vals)
-        case Or(exps):
-            rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
-            if len(rob_vals) == 0:
-                return None
-            return np.max(rob_vals)
+            w = stl_monitor_fast(e, x)
+            return comp_sat_neg(w)
+        case Or(exps) | And(exps):
+            ws = [stl_monitor_fast(e, x) for e in exps]
+            return comp_sat_compose(spec, ws)
         case G(e, t_start, t_end):
-            g_interval = range(t + t_start, min(t + t_end + 1, len(x)))
-            if len(g_interval) == 0:
-                return None
-            rob_vals = remove_nones([stl_rob(e, x, a) for a in g_interval])
-            return np.min(rob_vals)
-        case H(e, t_start, t_end):
-            h_interval = range(max(t - t_end, 0), t - t_start + 1)
-            if len(h_interval) == 0:
-                return None
-            rob_vals = remove_nones([stl_rob(e, x, a) for a in h_interval])
-            return np.min(rob_vals)
+            w = stl_monitor_fast(e, x)
+            return comp_sat_always(t_start, t_end, w)
         case F(e, t_start, t_end):
-            f_interval = range(t + t_start, min(t + t_end + 1, len(x)))
-            if len(f_interval) == 0:
-                return None
-            rob_vals = remove_nones([stl_rob(e, x, a) for a in f_interval])
-            return np.max(rob_vals)
+            w = stl_monitor_fast(e, x)
+            return comp_sat_eventually(t_start, t_end, w)
         case O(e, t_start, t_end):
-            o_interval = range(max(t - t_end, 0), t - t_start + 1)
-            if len(o_interval) == 0:
-                return None
-            rob_vals = remove_nones([stl_rob(e, x, a) for a in o_interval])
-            return np.max(rob_vals)
-        case U(e_1, e_2, t_start, t_end):
-            u_interval = range(t + t_start, min(t + t_end + 1, len(x)))
-            if len(u_interval) == 0:
-                return None
-
-            lhs = remove_nones([stl_rob(e_1, x, a) for a in u_interval])
-            lhs_cums = [np.min(lhs[:k + 1]) for k in range(len(lhs))]
-            rhs = remove_nones([stl_rob(e_2, x, a) for a in u_interval])
-
-            assert len(lhs) == len(rhs), f"Ill formed 'Until' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
-
-            running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
-
-            return np.max(running_vals)
-        case S(e_1, e_2, t_start, t_end):
-            s_interval = range(max(t - t_end, 0), t - t_start + 1)
-            if len(s_interval) == 0:
-                return None
-
-            lhs = remove_nones([stl_rob(e_1, x, a) for a in s_interval])
-            lhs_cums = [np.min(lhs[k:]) for k in range(len(lhs))]
-            rhs = remove_nones([stl_rob(e_2, x, a) for a in s_interval])
-
-            assert len(lhs) == len(rhs), f"Ill formed 'Since' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
-
-            running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
-
-            return np.max(running_vals)
+            w = stl_monitor_fast(e, x)
+            return comp_sat_once(t_start, t_end, w)
+        case H(e, t_start, t_end):
+            w = stl_monitor_fast(e, x)
+            return comp_sat_history(t_start, t_end, w)
+        case U(e1, e2, t_start, t_end):
+            w1 = stl_monitor_fast(e1, x)
+            w2 = stl_monitor_fast(e2, x)
+            return comp_sat_until(t_start, t_end, w1, w2)
+        case S(e1, e2, t_start, t_end):
+            w1 = stl_monitor_fast(e1, x)
+            w2 = stl_monitor_fast(e2, x)
+            return comp_sat_since(t_start, t_end, w1, w2)
 
         case _:
             raise ValueError(f"Invalid spec: : {spec} of type {type(spec)}")
+
+
+# def stl_rob(spec: STLExp, x: Any, t: int) -> Optional[float]:
+#     match spec:
+#         case Tru():
+#             return np.inf
+#         case GEQ0(f):
+#             return f(x[t])
+#         case LEQ0(f):
+#             return -f(x[t])
+#         case Neg(e):
+#             return -stl_rob(e, x, t)
+#         case And(exps):
+#             rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
+#             if len(rob_vals) == 0:
+#                 return None
+#             return np.min(rob_vals)
+#         case Or(exps):
+#             rob_vals = remove_nones([stl_rob(e, x, t) for e in exps])
+#             if len(rob_vals) == 0:
+#                 return None
+#             return np.max(rob_vals)
+#         case G(e, t_start, t_end):
+#             g_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+#             if len(g_interval) == 0:
+#                 return None
+#             rob_vals = remove_nones([stl_rob(e, x, a) for a in g_interval])
+#             return np.min(rob_vals)
+#         case H(e, t_start, t_end):
+#             h_interval = range(max(t - t_end, 0), t - t_start + 1)
+#             if len(h_interval) == 0:
+#                 return None
+#             rob_vals = remove_nones([stl_rob(e, x, a) for a in h_interval])
+#             return np.min(rob_vals)
+#         case F(e, t_start, t_end):
+#             f_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+#             if len(f_interval) == 0:
+#                 return None
+#             rob_vals = remove_nones([stl_rob(e, x, a) for a in f_interval])
+#             return np.max(rob_vals)
+#         case O(e, t_start, t_end):
+#             o_interval = range(max(t - t_end, 0), t - t_start + 1)
+#             if len(o_interval) == 0:
+#                 return None
+#             rob_vals = remove_nones([stl_rob(e, x, a) for a in o_interval])
+#             return np.max(rob_vals)
+#         case U(e_1, e_2, t_start, t_end):
+#             u_interval = range(t + t_start, min(t + t_end + 1, len(x)))
+#             if len(u_interval) == 0:
+#                 return None
+#
+#             lhs = remove_nones([stl_rob(e_1, x, a) for a in u_interval])
+#             lhs_cums = [np.min(lhs[:k + 1]) for k in range(len(lhs))]
+#             rhs = remove_nones([stl_rob(e_2, x, a) for a in u_interval])
+#
+#             assert len(lhs) == len(rhs), f"Ill formed 'Until' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
+#
+#             running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
+#
+#             return np.max(running_vals)
+#         case S(e_1, e_2, t_start, t_end):
+#             s_interval = range(max(t - t_end, 0), t - t_start + 1)
+#             if len(s_interval) == 0:
+#                 return None
+#
+#             lhs = remove_nones([stl_rob(e_1, x, a) for a in s_interval])
+#             lhs_cums = [np.min(lhs[k:]) for k in range(len(lhs))]
+#             rhs = remove_nones([stl_rob(e_2, x, a) for a in s_interval])
+#
+#             assert len(lhs) == len(rhs), f"Ill formed 'Since' ({spec}) - lhs:{len(lhs)}, rhs:{len(rhs)}"
+#
+#             running_vals = [min(r, lc) for r, lc in zip(rhs, lhs_cums)]
+#
+#             return np.max(running_vals)
+#
+#         case _:
+#             raise ValueError(f"Invalid spec: : {spec} of type {type(spec)}")
 
 
 # # Smooth approximation functions for max/min operations

@@ -36,19 +36,25 @@ def load_gp_reg(folder_path: str, cuda=False) -> gp.models.SparseGPRegression:
     Xu = torch.load(os.path.join(folder_path, "inducing_points.pt"))
     kernel = torch.load(os.path.join(folder_path, "kernel.pt"))
 
-    vsgp = gp.models.SparseGPRegression(train_ins, train_labels, kernel, Xu, jitter=1e-03).cuda()
+    vsgp = gp.models.SparseGPRegression(train_ins, train_labels, kernel, Xu, jitter=1e-03)
+    state_d = torch.load(os.path.join(folder_path, "state_dict.pt"))
     vsgp.load_state_dict(torch.load(os.path.join(folder_path, "state_dict.pt")))
+
+    p_store = pyro.get_param_store()
+    print(kernel.lengthscale)
 
     if cuda:
         vsgp = vsgp.cuda()
         vsgp.X = vsgp.X.cuda()
         vsgp.y = vsgp.y.cuda()
         vsgp.Xu = vsgp.Xu.cuda()
+        vsgp.kernel = vsgp.kernel.cuda()
     else:
         vsgp = vsgp.cpu()
         vsgp.X = vsgp.X.cpu()
         vsgp.y = vsgp.y.cpu()
         vsgp.Xu = vsgp.Xu.cpu()
+        vsgp.kernel = vsgp.kernel.cpu()
 
     return vsgp
 
@@ -104,11 +110,11 @@ def run():
     train_data = TensorDataset(X_t[l_t[:, 0] == 1], l_t[l_t[:, 0] == 1])
     val_data = TensorDataset(X_v[l_v[:, 0] == 1], l_v[l_v[:, 0] == 1])
 
-    kernel = gp.kernels.Matern52(X.shape[1], lengthscale=torch.ones(X.shape[1]))
+    kernel = gp.kernels.RBF(X.shape[1], lengthscale=torch.ones(X.shape[1]))
 
     subset = len(train_data.tensors[0])
 
-    Xu = train_data.tensors[0][::50]
+    Xu = train_data.tensors[0][::500]
 
     vsgp = gp.models.SparseGPRegression(train_data.tensors[0][:subset],
                                         train_data.tensors[1][:subset, [1, 2]].T,  # Error in the x/y coordinates
@@ -116,19 +122,19 @@ def run():
                                         Xu=Xu,
                                         jitter=1e-05).cuda()
 
-    # # elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=400,
-    # #                                    optimizer=torch.optim.AdamW(vsgp.parameters()),
-    # #                                    scheduler_step=None)
-    #
-    # plot_loss(elbo_losses)
-    # plt.show()
-    #
-    # plot_loss(val_losses)
-    # plt.show()
+    elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=500,
+                                       optimizer=torch.optim.AdamW(vsgp.parameters(), lr=1e-3),
+                                       scheduler_step=None)
+
+    plot_loss(elbo_losses)
+    plt.show()
+
+    plot_loss(val_losses)
+    plt.show()
 
     model_folder = f"models/nuscenes/sgp_reg"
-    # save_sparse_gp(model_folder, vsgp)
-    vsgp = load_gp_reg(model_folder)
+    save_sparse_gp(model_folder, vsgp)
+    vsgp = load_gp_reg(model_folder, True)
 
     # torch.save(vsgp.state_dict(), f"models/nuscenes/sgp_reg_i{len(Xu)}.pt")
     # vsgp.load_state_dict(torch.load(f"models/nuscenes/sgp_reg_i{len(Xu)}.pt"))

@@ -75,6 +75,9 @@ def save_sparse_gp(folder_path: str, vsgp: gp.models.VariationalSparseGP):
     torch.save(vsgp.Xu, os.path.join(folder_path, "inducing_points.pt"))
     torch.save(vsgp.kernel, os.path.join(folder_path, "kernel.pt"))
 
+    p_store = pyro.get_param_store()
+    print(p_store)
+
 
 def load_gp_classifier(folder_path: str, cuda=False) -> gp.models.VariationalSparseGP:
     train_ins = torch.load(os.path.join(folder_path, "train_ins.pt"))
@@ -122,7 +125,7 @@ def run():
     t_lows = torch.min(train_data.tensors[0], dim=0)[0]
     t_highs = torch.max(train_data.tensors[0], dim=0)[0]
 
-    Xu = train_data.tensors[0][::100]
+    Xu = train_data.tensors[0][::250]
     # Xu = torch.rand((590, 8))
 
     vsgp = gp.models.VariationalSparseGP(train_data.tensors[0][:subset],
@@ -130,10 +133,10 @@ def run():
                                          kernel,
                                          Xu=Xu,
                                          likelihood=likelihood,
-                                         # whiten=False,
-                                         jitter=1e-03).cuda()
+                                         # whiten=True,
+                                         jitter=1e-05).cuda()
 
-    elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=500,
+    elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=1000,
                                        optimizer=torch.optim.AdamW(vsgp.parameters(), lr=0.1),
                                        scheduler_step=200)
 
@@ -148,7 +151,7 @@ def run():
 
     save_sparse_gp(f"models/nuscenes/vsgp_class", vsgp)
 
-    vsgp = load_gp_classifier(f"models/nuscenes/vsgp_class")
+    vsgp = load_gp_classifier(f"models/nuscenes/vsgp_class", True)
 
     gp_v_preds, gp_v_vars = vsgp(val_data.tensors[0], full_cov=False)
     plot_roc(val_data.tensors[1][:, 0].cpu().detach(), torch.sigmoid(gp_v_preds.cpu().detach()), "GP")
