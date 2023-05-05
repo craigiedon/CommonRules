@@ -1,6 +1,6 @@
 from commonroad.common.file_reader import CommonRoadFileReader
 
-from utils import animate_scenario
+from anim_utils import animate_scenario
 
 file_path = "scenarios/Complex_Solution.xml"
 scenario, planning_problem_set = CommonRoadFileReader(file_path).open()

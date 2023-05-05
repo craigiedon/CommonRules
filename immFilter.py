@@ -168,7 +168,7 @@ def run():
     pred_ts = np.arange(0, 9)
     for pt in pred_ts:
         pts = int(pt / lat_config.dt)
-        prediction_at_t = target_state_prediction(lat_mus[pts], lat_models, mps_lat[pts], N - pts)
+        prediction_at_t = t_state_pred(lat_mus[pts], lat_models, mps_lat[pts], N - pts)
         axs.plot(ts * np.arange(pts, N), prediction_at_t[:, 0], color='purple', alpha=0.5)
 
     # for fp_lat_trace in fpy_mus_lat:
@@ -242,12 +242,12 @@ def car_sim_lat(x_lat_0: np.ndarray, lane_durations: List[Tuple[float, int]], la
     return xs_lat, zs_lat
 
 
-def target_state_prediction(x_est: np.ndarray, models: List[AffineModel], model_probs: List[float],
-                            prediction_steps: int) -> np.ndarray:
+def t_state_pred(x_est: np.ndarray, models: List[AffineModel], model_probs: List[float],
+                 prediction_steps: int) -> np.ndarray:
     top_model = models[np.argmax(model_probs)]
 
     x_current = x_est
-    predictions = []
+    predictions = [x_current]
     for i in range(prediction_steps):
         x_current = update_sim_noiseless(x_current, top_model)
         predictions.append(x_current)
@@ -336,6 +336,17 @@ class IMMResult:
     fused_cov: np.ndarray
     model_mus: np.ndarray
     model_covs: np.ndarray
+
+
+def imm_kalman_optional(models: List[AffineModel],
+                        m_trans_ps: np.ndarray,
+                        old_model_ps: np.ndarray,
+                        old_mus: np.ndarray,
+                        old_covs: np.ndarray,
+                        z: Optional[np.ndarray]) -> IMMResult:
+    if z is not None:
+        return imm_kalman_filter(models, m_trans_ps, old_model_ps, old_mus, old_covs, z)
+    return imm_kalman_no_obs(models, m_trans_ps, old_model_ps, old_mus, old_covs)
 
 
 def imm_kalman_filter(models: List[AffineModel],

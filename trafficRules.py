@@ -161,7 +161,8 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
 
         behind_pot = ((behind_v ** 2) / (-2 * np.abs(acc_min)))
         front_pot = ((front_v ** 2) / (-2 * np.abs(acc_min)))
-        safe_dist = behind_pot - front_pot + front_v * reaction_time
+        # safe_dist = behind_pot - front_pot + front_v * reaction_time
+        safe_dist = front_pot - behind_pot + behind_v * reaction_time
 
         dist = rear(front_car, s)[0] - front(behind_car, s)[0]
 
@@ -172,6 +173,7 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
 
 def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
                         a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
+
     def ego_acc(s: Dict[int, CustomState]) -> float:
         return s[ego_car.obstacle_id].acceleration
 
@@ -402,7 +404,7 @@ def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float]
     faster_left_cars = []
     for other_car in other_cars:
         lhs = And([left_of(other_car, ego_car), drives_faster(ego_car, other_car)])
-        remaining_cars = [o for o in other_cars if o != other_car]
+        remaining_cars = [o for o in other_cars if o.obstacle_id != other_car.obstacle_id]
         blocked = Or([
             in_congestion(other_car, remaining_cars, lane_centres, lane_widths, congestion_vel, congestion_size),
             in_vehicle_queue(other_car, remaining_cars, lane_centres, lane_widths, queue_vel, queue_size),

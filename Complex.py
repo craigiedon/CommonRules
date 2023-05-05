@@ -12,7 +12,7 @@ from commonroad.scenario.trajectory import State, Trajectory
 from matplotlib import pyplot as plt
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights, receding_horizon
-from utils import animate_scenario
+from anim_utils import animate_scenario
 
 
 def run():
@@ -28,8 +28,8 @@ def run():
                              x_goal=goal_state[0],
                              y_goal=goal_state[1],
                              y_bounds=(0.0, 7.0),
-                             car_width=4.298,
-                             car_height=1.674,
+                             car_length=4.298,
+                             car_width=1.674,
                              v_goal=31.29,  # == 70mph
                              v_max=45.8,
                              acc_max=11.5,
@@ -45,7 +45,7 @@ def run():
 
     dn_state_list = receding_horizon(end_time, 1.0, start_state, scenario, task_config, cws)
 
-    dyn_obs_shape = Rectangle(width=task_config.car_height, length=task_config.car_width)
+    dyn_obs_shape = Rectangle(width=task_config.car_width, length=task_config.car_length)
     dyn_obs_traj = Trajectory(1, dn_state_list)
     dyn_obs_pred = TrajectoryPrediction(dyn_obs_traj, dyn_obs_shape)
     ego_id = 100

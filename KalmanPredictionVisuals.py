@@ -10,7 +10,7 @@ from matplotlib import animation
 from matplotlib.animation import FuncAnimation
 
 from CarMPC import RecedingHorizonStats
-from immFilter import measure_from_state, c_acc_long_model, DiagFilterConfig, lat_model, target_state_prediction, \
+from immFilter import measure_from_state, c_acc_long_model, DiagFilterConfig, lat_model, t_state_pred, \
     imm_batch, sticky_m_trans, unif_cat_prior, c_vel_long_model, closest_lane_prior, all_model_predictions
 from trafficRules import rot_mat
 
@@ -106,10 +106,10 @@ def run():
         lat_mu = obstacle_lat_mus[o.obstacle_id]
 
         obstacle_long_preds[o.obstacle_id] = np.stack(
-            [target_state_prediction(long_mu[i], long_models, imm_long_stats[o.obstacle_id][2][i], 15) for i in
+            [t_state_pred(long_mu[i], long_models, imm_long_stats[o.obstacle_id][2][i], 15) for i in
              range(T)])
         obstacle_lat_preds[o.obstacle_id] = np.stack(
-            [target_state_prediction(lat_mu[i], lat_models, imm_lat_stats[o.obstacle_id][2][i], 15) for i in range(T)])
+            [t_state_pred(lat_mu[i], lat_models, imm_lat_stats[o.obstacle_id][2][i], 15) for i in range(T)])
 
     # Mark the "noisy" steps on the visualizer
     fig, ax = plt.subplots(1, 1, figsize=(25, 2.5))

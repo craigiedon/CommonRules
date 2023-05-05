@@ -128,6 +128,7 @@ def comp_sat_tru(x) -> np.ndarray:
 def comp_sat_compare(spec: Union[LEQ0, GEQ0], xs) -> np.ndarray:
     match spec:
         case LEQ0(f):
+            ys = [f(x) for x in xs]
             return -np.array([f(x) for x in xs])
         case GEQ0(f):
             return np.array([f(x) for x in xs])
@@ -311,6 +312,10 @@ def stl_rob(spec: STLExp, x: Any, t: int) -> float:
     return stl_monitor_fast(spec, x)[t]
 
 
+def unbound_signal(t_end, x) -> float:
+    return t_end if t_end < len(x) else np.inf
+
+
 def stl_monitor_fast(spec: STLExp, x: Any):
     match spec:
         case Tru():
@@ -325,24 +330,24 @@ def stl_monitor_fast(spec: STLExp, x: Any):
             return comp_sat_compose(spec, ws)
         case G(e, t_start, t_end):
             w = stl_monitor_fast(e, x)
-            return comp_sat_always(t_start, t_end, w)
+            return comp_sat_always(t_start, unbound_signal(t_end, w), w)
         case F(e, t_start, t_end):
             w = stl_monitor_fast(e, x)
-            return comp_sat_eventually(t_start, t_end, w)
+            return comp_sat_eventually(t_start, unbound_signal(t_end, x), w)
         case O(e, t_start, t_end):
             w = stl_monitor_fast(e, x)
-            return comp_sat_once(t_start, t_end, w)
+            return comp_sat_once(t_start, unbound_signal(t_end, w), w)
         case H(e, t_start, t_end):
             w = stl_monitor_fast(e, x)
-            return comp_sat_history(t_start, t_end, w)
+            return comp_sat_history(t_start, unbound_signal(t_end, x), w)
         case U(e1, e2, t_start, t_end):
             w1 = stl_monitor_fast(e1, x)
             w2 = stl_monitor_fast(e2, x)
-            return comp_sat_until(t_start, t_end, w1, w2)
+            return comp_sat_until(t_start, unbound_signal(t_end, x), w1, w2)
         case S(e1, e2, t_start, t_end):
             w1 = stl_monitor_fast(e1, x)
             w2 = stl_monitor_fast(e2, x)
-            return comp_sat_since(t_start, t_end, w1, w2)
+            return comp_sat_since(t_start, unbound_signal(t_end, x), w1, w2)
 
         case _:
             raise ValueError(f"Invalid spec: : {spec} of type {type(spec)}")

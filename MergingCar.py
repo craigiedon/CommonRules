@@ -8,7 +8,7 @@ from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State, Trajectory
 
 from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights
-from utils import animate_scenario
+from anim_utils import animate_scenario
 
 
 def run():
@@ -23,9 +23,9 @@ def run():
                              x_goal=goal_state[0],
                              y_goal=lane_centres[1],
                              y_bounds=(-3.5, 7.0),
-                             car_width=4.298,
-                             car_height=1.674,
-                             v_goal=22.29, # == 70mph
+                             car_length=4.298,
+                             car_width=1.674,
+                             v_goal=22.29,  # == 70mph
                              # v_goal= 20.352,
                              v_max=45.8,
                              acc_max=11.5,

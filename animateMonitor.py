@@ -3,7 +3,7 @@ import os
 
 from commonroad.common.file_reader import CommonRoadFileReader
 
-from utils import animate_scenario_and_monitor
+from anim_utils import animate_scenario_and_monitor
 
 
 def run():
