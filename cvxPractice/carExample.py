@@ -102,7 +102,7 @@ obs_xmax = obs_xs + (obs_l / 2.0) + ego_l / 2.0
 obs_ymin = obs_ys - (obs_w / 2.0) - ego_w / 2.0
 obs_ymax = obs_ys + (obs_w / 2.0) + ego_w / 2.0
 
-M = 1000
+M = 10000
 
 # mu_k = (cvxpy.maximum(0.0, obs_xmin - x) +
 #         cvxpy.maximum(x - obs_xmax, 0.0) +
