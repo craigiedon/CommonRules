@@ -185,17 +185,28 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
     lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
 
     # Obstacle Avoidance (Potential Fields)
-    lateral_slack = 0.1
+    lateral_slack = 0.0
     if len(obstacles) > 0:
         d_pots = []
         for obs in obstacles:
             d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
             d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
 
-            d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2
-            d_dist_y = ((ys - d_ys) / (obs.obstacle_shape.width + lateral_slack)) ** 2
+            # d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2
+            d_dist_x = (xs - d_xs) ** 2 - 3# - (obs.obstacle_shape.length + 5) ** 2
+            x_pot = casadi.exp(-task.collision_field_slope * d_dist_x) - casadi.exp(task.collision_field_slope * 3)# - casadi.exp(task.collision_field_slope * (obs.obstacle_shape.length + 5) ** 2)
 
-            d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
+            # d_dist_y = ((ys - d_ys) / (obs.obstacle_shape.width + lateral_slack)) ** 2
+
+            yg_slope = 0.5
+            y_gate = 1.0 / (1.0 + casadi.exp(yg_slope * ((ys - d_ys) ** 2 - obs.obstacle_shape.width ** 2)) - casadi.exp(-yg_slope * obs.obstacle_shape.width ** 2))
+
+            avoidance_pot = y_gate * x_pot
+            # avoidance_pot = x_pot
+
+            d_pots.append(avoidance_pot)
+
+            # d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
         d_pots = casadi.vcat(d_pots)
         obs_cost = casadi.sum2(casadi.sum1(d_pots))
     else:
@@ -217,7 +228,7 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
             x_pot = 10 * casadi.exp(-d_dist_x)
 
             d_offset_ys = ys - d_ys
-            y_pot = 1.0 / (1.0 + casadi.exp(100.0 * d_offset_ys)) # Sigmoid Squashing
+            y_pot = 1.0 / (1.0 + casadi.exp(10.0 * d_offset_ys)) # Sigmoid Squashing
 
             vel_diffs = casadi.fmax(vs - d_vs, 0.0)
 
@@ -743,9 +754,7 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
         # res = car_mpc(prediction_steps + 1, current_state, task_config,
         #               scenario.obstacles, pred_longs, pred_lats, cws, res)
         # free = car_mpc(prediction_steps + 1, current_state, task_config,
-        #               [], {}, {}, CostWeights(x_prog=1, y_prog=1, v_track=1,
-        #                                                                      acc=0, ang_v=0, jerk=0, road_align=0,
-        #                                                                      lane_align=0, collision_pot=0, faster_left=0, braking=0), None)
+        #               [], {}, {}, cws, None)
         res = car_mpc(prediction_steps + 1, current_state, task_config,
                       scenario.obstacles, pred_longs, pred_lats, cws, None)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],

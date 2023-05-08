@@ -5,10 +5,10 @@
   "ang_v":10,
   "jerk":1,
   "v_track":2,
-  "lane_align":1,
-  "road_align":10,
-  "collision_pot":500,
-  "faster_left": 5,
+  "lane_align":1.0,
+  "road_align":1,
+  "collision_pot":50,
+  "faster_left": 0,
   "braking" :10
 }
 

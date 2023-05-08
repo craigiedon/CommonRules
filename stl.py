@@ -309,7 +309,9 @@ def comp_sat_since(a, b, w_left, w_right) -> np.ndarray:
 
 
 def stl_rob(spec: STLExp, x: Any, t: int) -> float:
-    return stl_monitor_fast(spec, x)[t]
+    rob_signal = stl_monitor_fast(spec, x)
+    return rob_signal[t]
+    # return stl_monitor_fast(spec, x)[t]
 
 
 def unbound_signal(t_end, x) -> float:

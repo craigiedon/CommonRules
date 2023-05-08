@@ -30,7 +30,7 @@ def run():
     lane_widths = np.abs((ego_lane_centres[0] - ego_lane_centres[1]) / 2.0)
 
     goal_state = planning_problem_set.find_planning_problem_by_id(1).goal.state_list[0].position.center
-    end_time = 5.0
+    end_time = 6.0
     task_config = TaskConfig(dt=0.1,
                              x_goal=goal_state[0],
                              y_goal=goal_state[1],
@@ -44,7 +44,7 @@ def run():
                              lanes=ego_lane_centres,
                              lane_targets=[],
                              # collision_field_slope=1e-5)
-                             collision_field_slope=0.8)
+                             collision_field_slope=1.0)
 
     start_state = InitialState(position=np.array([10.0, ego_lane_centres[0]]), velocity=task_config.v_goal * 0.3,
                                orientation=0, acceleration=0.0, time_step=0)

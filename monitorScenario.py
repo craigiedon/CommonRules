@@ -38,7 +38,7 @@ def gen_interstate_rules(ego_id: int, scenario: Scenario, lane_centres: List[flo
                          main_cw_cs: List[float], access_cs: List[float], irc: InterstateRulesConfig) -> Dict[
     str, STLExp]:
     ego_car = scenario.obstacle_by_id(ego_id)
-    obstacles = scenario.obstacles
+    obstacles = [o for o in scenario.obstacles if o.obstacle_id != ego_id]
     return {
         "rg_1": safe_dist_rule_multi(ego_car, obstacles, lane_centres, lane_widths, irc.acc_min, irc.reaction_time,
                                      int(np.round(irc.t_cut_in / irc.dt))),
