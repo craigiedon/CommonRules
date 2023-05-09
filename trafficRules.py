@@ -159,12 +159,17 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
         front_v = s[front_car.obstacle_id].velocity
         behind_v = s[behind_car.obstacle_id].velocity
 
-        behind_pot = ((behind_v ** 2) / (-2 * np.abs(acc_min)))
-        front_pot = ((front_v ** 2) / (-2 * np.abs(acc_min)))
+        # behind_pot = (behind_v ** 2) / (-2 * np.abs(acc_min))
+        # front_pot = (front_v ** 2) / (-2 * np.abs(acc_min))
         # safe_dist = behind_pot - front_pot + front_v * reaction_time
-        safe_dist = front_pot - behind_pot + behind_v * reaction_time
+        # safe_dist = front_pot - behind_pot + behind_v * reaction_time
+        safe_dist = 0.0
 
         dist = rear(front_car, s)[0] - front(behind_car, s)[0]
+
+        differ = dist - safe_dist
+        if differ < 0:
+            pass
 
         return dist - safe_dist
 
@@ -173,7 +178,6 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
 
 def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
                         a_abrupt: float, acc_min: float, reaction_time: float) -> STLExp:
-
     def ego_acc(s: Dict[int, CustomState]) -> float:
         return s[ego_car.obstacle_id].acceleration
 

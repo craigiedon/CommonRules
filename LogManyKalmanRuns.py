@@ -12,8 +12,9 @@ from commonroad.scenario.state import InitialState
 from commonroad.scenario.trajectory import Trajectory
 from tqdm import tqdm
 
-from CarMPC import TaskConfig, CostWeights, kalman_receding_horizon, pem_observation_batch
-from ComplexKalman import mpc_result_to_dyn_obj
+from CarMPC import kalman_receding_horizon, pem_observation_batch
+from TaskConfig import TaskConfig, CostWeights
+from utils import mpc_result_to_dyn_obj
 from PyroGPClassification import load_gp_classifier
 from PyroGPRegression import load_gp_reg
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
@@ -30,7 +31,7 @@ def run():
     lane_widths = np.abs((ego_lane_centres[0] - ego_lane_centres[1]) / 2.0)
 
     goal_state = planning_problem_set.find_planning_problem_by_id(1).goal.state_list[0].position.center
-    end_time = 6.0
+    end_time = 5.0
     task_config = TaskConfig(dt=0.1,
                              x_goal=goal_state[0],
                              y_goal=goal_state[1],
@@ -83,7 +84,7 @@ def run():
     for i in range(20):
     # for i in tqdm(range(5)):
         kalman_start = time.time()
-        dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.0, start_state, scenario, task_config,
+        dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 1.5, start_state, scenario, task_config,
                                                                   long_models, lat_models, observation_func,
                                                                   cws)
         print(f"Took {time.time() - kalman_start}s")

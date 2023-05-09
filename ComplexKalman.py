@@ -1,39 +1,17 @@
 import time
-from typing import List
 
 import numpy as np
 import torch
 from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.common.file_writer import CommonRoadFileWriter, OverwriteExistingFile
-from commonroad.geometry.shape import Rectangle
-from commonroad.prediction.prediction import TrajectoryPrediction
-from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticObstacle
-from commonroad.scenario.scenario import Scenario
-from commonroad.scenario.state import InitialState, KSState, CustomState
-from commonroad.scenario.trajectory import State, Trajectory
-from commonroad.visualization.mp_renderer import MPRenderer
-from matplotlib import pyplot as plt, animation
-from matplotlib.animation import FuncAnimation
+from commonroad.scenario.state import InitialState
 
-from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights, receding_horizon, \
-    kalman_receding_horizon, pem_observation_batch
-from KalmanPredictionVisuals import animate_kalman_predictions
+from CarMPC import kalman_receding_horizon, pem_observation_batch
+from TaskConfig import TaskConfig, CostWeights
 from PyroGPClassification import load_gp_classifier
 from PyroGPRegression import load_gp_reg
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
 from anim_utils import animate_with_predictions, animate_scenario
-
-
-def mpc_result_to_dyn_obj(o_id, dn_state_list: List[CustomState], car_width: float,
-                          car_length: float):
-    dyn_obs_shape = Rectangle(width=car_width, length=car_length)
-    dyn_obs_traj = Trajectory(1, dn_state_list[1:])
-    dyn_obs_pred = TrajectoryPrediction(dyn_obs_traj, dyn_obs_shape)
-    return DynamicObstacle(o_id,
-                           ObstacleType.CAR,
-                           dyn_obs_shape,
-                           dn_state_list[0],
-                           dyn_obs_pred)
+from utils import mpc_result_to_dyn_obj
 
 
 def run():

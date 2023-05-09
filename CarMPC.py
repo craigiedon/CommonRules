@@ -1,6 +1,9 @@
 import time
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from TaskConfig import TaskConfig, CostWeights, KinMPCRes, point_to_kin_res
+from cvxPractice.carExample import cvx_mpc
 from typing import List, Any, Tuple, Optional, Dict
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,76 +11,17 @@ import numpy as np
 import casadi
 import pyro
 import torch
-from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle, Obstacle
+from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.scenario import Scenario
-from commonroad.scenario.state import InitialState, KSState, CustomState
+from commonroad.scenario.state import InitialState, CustomState
 from commonroad.scenario.trajectory import State
 from matplotlib import patches, transforms
-from matplotlib.transforms import Affine2D
 import torch.nn as nn
 
-from PyroGPClassification import load_gp_classifier
-from PyroGPRegression import load_gp_reg
 from Raycasting import ray_intersect, radial_ray_batch, occlusions_from_ray_hits
-from immFilter import t_state_pred, imm_kalman_filter, sticky_m_trans, AffineModel, StateFeedbackModel, \
-    measure_from_state, unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_no_obs, imm_kalman_optional
-from utils import angle_diff, rot_mat
-
-
-@dataclass
-class IntervalConstraint:
-    value: Any
-    time_interval: Tuple[float, float]
-
-
-@dataclass
-class TaskConfig:
-    # time: float # Seconds
-    dt: float  # steps/second
-    x_goal: float  # Metres
-    y_goal: float  # Metres
-    y_bounds: Tuple[float, float]
-    car_length: float  # Metres
-    car_width: float  # Metres
-    v_goal: float  # Metres/Sec
-    v_max: float  # Metres/Sec
-    acc_max: float  # Metres/Sec**2
-    ang_vel_max: float  # Metres/Sec
-    lanes: List[float]  # Metres
-    lane_targets: List[IntervalConstraint]
-    collision_field_slope: float
-
-
-@dataclass
-class CostWeights:
-    x_prog: float = 1
-    y_prog: float = 1
-    v_track: float = 1
-    acc: float = 1
-    ang_v: float = 1
-    jerk: float = 1
-    road_align: float = 1
-    lane_align: float = 1
-    collision_pot: float = 1
-    faster_left: float = 1
-    braking: float = 1
-
-
-# @dataclass
-# class CarState:
-#     x: float
-#     y: float
-#     v: float
-#     heading: float
-
-@dataclass
-class CarMPCRes:
-    xs: np.ndarray
-    ys: np.ndarray
-    vs: np.ndarray
-    hs: np.ndarray
-    accs: np.ndarray
-    ang_vels: np.ndarray
+from immFilter import t_state_pred, sticky_m_trans, AffineModel, StateFeedbackModel, \
+    unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_optional
+from utils import angle_diff, rot_mat, obs_long_lats, RecedingHorizonStats
 
 
 @dataclass
@@ -135,7 +79,7 @@ def to_numpy_polys(x: float, y: float, w: float, h: float, rot: float) -> PolyCo
 
 def car_mpc(T: int, start_state: State, task: TaskConfig,
             obstacles: List[Obstacle], obs_pred_longs: Dict[int, np.ndarray], obs_pred_lats: Dict[int, np.ndarray],
-            cw: Optional[CostWeights] = None, prev_solve: CarMPCRes = None) -> CarMPCRes:
+            cw: Optional[CostWeights] = None, prev_solve: KinMPCRes = None) -> KinMPCRes:
     opti = casadi.Opti()
 
     xs = opti.variable(T)
@@ -225,7 +169,7 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
 
             d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2.0
             # d_dist_y = casadi.fmax(0.0, (d_ys + obs.obstacle_shape.width / 2.0) - (ys - task.car_width / 2.0))
-            x_pot = 10 * casadi.exp(-d_dist_x)
+            x_pot = 100 * casadi.exp(-10 * d_dist_x)
 
             d_offset_ys = ys - d_ys
             y_pot = 1.0 / (1.0 + casadi.exp(10.0 * d_offset_ys)) # Sigmoid Squashing
@@ -304,12 +248,12 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
         print("ang_vels:", opti.debug.value(ang_vels))
         raise e
 
-    res = CarMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
+    res = KinMPCRes(sol.value(xs), sol.value(ys), sol.value(vs), sol.value(hs), sol.value(accs), sol.value(ang_vels))
 
     return res
 
 
-def plot_results(res: CarMPCRes, task: TaskConfig, static_obstacles: List[RectObstacle]):
+def plot_results(res: KinMPCRes, task: TaskConfig, static_obstacles: List[RectObstacle]):
     n_subplots = 4
     T = int(task.time / task.dt)
 
@@ -362,43 +306,6 @@ def receding_horizon(total_time: float, horizon_length: float, start_state: Init
         dn_state_list.append(current_state)
 
     return dn_state_list
-
-
-def obs_long_lats(obstacles: List[Obstacle], start_step: int, end_step: int) -> Tuple[
-    Dict[int, np.ndarray], Dict[int, np.ndarray]]:
-    # Retrofitting conversion for kalman format
-    obs_pred_longs = {}
-    obs_pred_lats = {}
-
-    for obs in obstacles:
-        ob_long, ob_lat = ll_from_CR_state(obs, start_step, end_step)
-        obs_pred_longs[obs.obstacle_id] = ob_long
-        obs_pred_lats[obs.obstacle_id] = ob_lat
-
-    return obs_pred_longs, obs_pred_lats
-
-
-def ll_from_CR_state(obs: Obstacle, start_step: int, end_step: int):
-    # Return long/lat state containing position, velocity and (for long) accelerations
-    ob_states = [obs.state_at_time(i) for i in range(start_step, end_step)]
-    ob_xs = np.array([s.position[0] for s in ob_states])
-    ob_ys = np.array([s.position[1] for s in ob_states])
-    ob_vs = np.array([s.velocity for s in ob_states])
-    ob_accs = np.array([s.acceleration for s in ob_states])
-    ob_r = np.array([s.orientation for s in ob_states])
-
-    ob_x_vs = ob_vs * np.cos(ob_r)
-    ob_y_vs = ob_vs * np.sin(ob_r)
-
-    ob_x_accs = ob_accs * np.cos(ob_r)
-
-    ob_long_state = np.stack((ob_xs, ob_x_vs, ob_x_accs), 1)
-    ob_lat_state = np.stack((ob_ys, ob_y_vs), 1)
-
-    assert ob_long_state.shape == (end_step - start_step, 3)
-    assert ob_lat_state.shape == (end_step - start_step, 2)
-
-    return ob_long_state, ob_lat_state
 
 
 def initial_long(o: Obstacle, obs_longs: Dict[int, np.ndarray], long_models: List[AffineModel]) -> IMMResult:
@@ -617,31 +524,6 @@ def pem_observation_batch(obs: List[Obstacle],
     return observed_long_state, observed_lat_state
 
 
-@dataclass
-class RecedingHorizonStats:
-    true_longs: List[np.ndarray] = field(default_factory=list)
-    true_lats: List[np.ndarray] = field(default_factory=list)
-    observed_longs: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
-    observed_lats: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
-    est_longs: List[np.ndarray] = field(default_factory=list)
-    est_lats: List[np.ndarray] = field(default_factory=list)
-    prediction_traj_longs: List[np.ndarray] = field(default_factory=list)
-    prediction_traj_lats: List[np.ndarray] = field(default_factory=list)
-
-    def append_stat(self, true_long: np.ndarray, true_lat: np.ndarray,
-                    obs_long: np.ndarray, obs_lat: np.ndarray,
-                    est_long: np.ndarray, est_lat: np.ndarray,
-                    pred_traj_long, pred_traj_lat):
-        self.true_longs.append(true_long)
-        self.true_lats.append(true_lat)
-        self.observed_longs.append(obs_long)
-        self.observed_lats.append(obs_lat)
-        self.est_longs.append(est_long)
-        self.est_lats.append(est_lat)
-        self.prediction_traj_longs.append(pred_traj_long)
-        self.prediction_traj_lats.append(pred_traj_lat)
-
-
 def get_corners(pos: np.ndarray, rot: float, length: float, width: float) -> np.ndarray:
     rm = rot_mat(rot)
     raw_corners = np.array([
@@ -755,8 +637,15 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
         #               scenario.obstacles, pred_longs, pred_lats, cws, res)
         # free = car_mpc(prediction_steps + 1, current_state, task_config,
         #               [], {}, {}, cws, None)
+        cvx_warm = cvx_mpc(prediction_steps + 1, task_config, current_state, scenario.obstacles, pred_longs, pred_lats)
+        if cvx_warm is not None:
+            # res = point_to_kin_res(cvx_warm)
+            warm_start = point_to_kin_res(cvx_warm)
+        else:
+            warm_start = None
+
         res = car_mpc(prediction_steps + 1, current_state, task_config,
-                      scenario.obstacles, pred_longs, pred_lats, cws, None)
+                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)

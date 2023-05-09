@@ -8,7 +8,7 @@ from commonroad.visualization.mp_renderer import MPRenderer
 from matplotlib import pyplot as plt, animation
 from matplotlib.animation import FuncAnimation
 
-from KalmanPredictionVisuals import animate_kalman_predictions
+from utils import RecedingHorizonStats
 
 
 def animate_scenario_old(scenario: Scenario, planning_problem_set, timesteps: int, save_path=None):
@@ -170,3 +170,33 @@ def animate_scenario_and_monitor(scenario: Scenario, rob_vs, save=False):
         ani.save("results/rg_1_monitor.gif", animation.PillowWriter(fps=15))
     plt.tight_layout()
     plt.show()
+
+
+def animate_kalman_predictions(i, ax, rnd: MPRenderer, scenario: Scenario,
+                               p_stats: Dict[int, RecedingHorizonStats],
+                               plot_tru_pos: bool = False,
+                               plot_obs_pos: bool = False):
+    rnd.draw_params.time_begin = i
+    rnd.draw_params.time_end = i + 15
+    scenario.draw(rnd)
+    rnd.render()
+
+    for o_id, ps in p_stats.items():
+        x_longs = np.array(ps.true_longs)
+        x_lats = np.array(ps.true_lats)
+        z_longs = np.array(ps.observed_longs)
+        z_lats = np.array(ps.observed_lats)
+
+        if plot_tru_pos:
+            ax.plot(x_longs[:i, 0], x_lats[:i, 0], zorder=100)
+
+        if plot_obs_pos:
+            detected_longs = [zl[0] for zl in z_longs[:i] if zl is not None]
+            detected_lats = [zl for zl in z_lats[:i] if zl is not None]
+            ax.scatter(detected_longs, detected_lats, zorder=100, s=25, marker='x', alpha=1.0)
+
+        ax.plot(ps.prediction_traj_longs[i][:, 0],
+                ps.prediction_traj_lats[i][:, 0],
+                color='purple', alpha=0.5, zorder=1000)
+
+        ax.scatter(ps.est_longs[i][0], ps.est_lats[i][0], color='purple', zorder=1000)

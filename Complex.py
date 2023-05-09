@@ -11,7 +11,8 @@ from commonroad.scenario.state import InitialState, KSState
 from commonroad.scenario.trajectory import State, Trajectory
 from matplotlib import pyplot as plt
 
-from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights, receding_horizon
+from CarMPC import RectObstacle, car_mpc, receding_horizon
+from TaskConfig import TaskConfig, IntervalConstraint, CostWeights
 from anim_utils import animate_scenario
 
 

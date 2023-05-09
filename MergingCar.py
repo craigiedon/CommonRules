@@ -7,7 +7,8 @@ from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType, StaticOb
 from commonroad.scenario.state import InitialState, KSState, CustomState
 from commonroad.scenario.trajectory import State, Trajectory
 
-from CarMPC import TaskConfig, RectObstacle, car_mpc, IntervalConstraint, CostWeights
+from CarMPC import RectObstacle, car_mpc
+from TaskConfig import TaskConfig, IntervalConstraint, CostWeights
 from anim_utils import animate_scenario
 
 
