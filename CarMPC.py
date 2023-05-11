@@ -3,7 +3,7 @@ import typing
 from dataclasses import dataclass
 
 from TaskConfig import TaskConfig, CostWeights, KinMPCRes, point_to_kin_res
-from cvxPractice.carExample import cvx_mpc
+from cvxPractice.carExample import cvx_mpc, create_cvx_mpc
 from typing import List, Any, Tuple, Optional, Dict
 import matplotlib.pyplot as plt
 import numpy as np
@@ -176,6 +176,7 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
 
             vel_diffs = casadi.fmax(vs - d_vs, 0.0)
 
+
             f_left_costs.append(casadi.fmin(y_pot, x_pot) * vel_diffs)
         f_lefts_combined = casadi.vcat(f_left_costs)
         f_left_cost = casadi.sumsqr(f_lefts_combined)
@@ -226,6 +227,8 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
     opti.subject_to(casadi.sum2(lane_selectors) == 1)
 
     opti.solver('ipopt', {"ipopt.print_level": 0, "print_time": 0, "ipopt.max_iter": 10000})
+    # opti.solver("gurobi")
+    # opti.solver('gurobi')
     # opti.solver('ipopt', {"ipopt.check_derivatives_for_naninf": "yes", "ipopt.max_iter": 10000})
 
     if prev_solve is not None:
@@ -589,6 +592,8 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                              prediction_steps)]
         ) for o in scenario.obstacles}
 
+    cvx_prob_config = create_cvx_mpc(prediction_steps + 1, task_config, scenario.obstacles)
+
     for i in range(1, T):
         # Calculating Visibilities from Raycasts
         visibilities = car_visibilities_raycast(100, current_state, i, scenario.obstacles)
@@ -637,15 +642,18 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
         #               scenario.obstacles, pred_longs, pred_lats, cws, res)
         # free = car_mpc(prediction_steps + 1, current_state, task_config,
         #               [], {}, {}, cws, None)
-        cvx_warm = cvx_mpc(prediction_steps + 1, task_config, current_state, scenario.obstacles, pred_longs, pred_lats)
-        if cvx_warm is not None:
-            # res = point_to_kin_res(cvx_warm)
-            warm_start = point_to_kin_res(cvx_warm)
-        else:
-            warm_start = None
 
-        res = car_mpc(prediction_steps + 1, current_state, task_config,
-                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
+        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, pred_longs, pred_lats)
+        if cvx_warm is not None:
+            res = point_to_kin_res(cvx_warm)
+            # warm_start = point_to_kin_res(cvx_warm)
+        else:
+            # warm_start = None
+        # if cvx_warm is not None:
+        #     res = point_to_kin_res(cvx_warm)
+        # else:
+            res = car_mpc(prediction_steps + 1, current_state, task_config,
+                          scenario.obstacles, pred_longs, pred_lats, cws, None)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)

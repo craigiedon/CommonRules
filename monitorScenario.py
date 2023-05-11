@@ -55,8 +55,12 @@ def gen_interstate_rules(ego_id: int, scenario: Scenario, lane_centres: List[flo
                                       irc.faster_diff_thresh),
         "ri_5": consider_entering_vehicles_rule(ego_car, obstacles, main_cw_cs, access_cs, lane_widths)}
 
-    for o in obstacles:
-        rule_dict[f"rg_1_{o.obstacle_id}"] = safe_dist_rule(ego_car, o, lane_centres, lane_widths, irc.acc_min, irc.reaction_time, int(np.round(irc.t_cut_in / irc.dt)))
+    # for o in obstacles:
+    #     # rule_dict[f"rg_1_{o.obstacle_id}"] = safe_dist_rule(ego_car, o, lane_centres, lane_widths, irc.acc_min, irc.reaction_time, int(np.round(irc.t_cut_in / irc.dt)))
+    #     rule_dict[f"ri_2_{o.obstacle_id}"] = faster_than_left_rule(ego_car, [o], main_cw_cs, access_cs, lane_widths, irc.congestion_vel,
+    #                                   irc.congestion_size, irc.queue_vel, irc.queue_size, irc.slow_traff_vel,
+    #                                   irc.traffic_size,
+    #                                   irc.faster_diff_thresh)
 
     return rule_dict
 

@@ -8,7 +8,7 @@
   "lane_align":10.0,
   "road_align":1,
   "collision_pot":10,
-  "faster_left": 0,
+  "faster_left": 10,
   "braking" : 10
 }
 
