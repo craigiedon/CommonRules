@@ -64,11 +64,13 @@ class PointMPCResult:
 
 
 def point_to_kin_res(r: PointMPCResult) -> KinMPCRes:
+    hs = np.arctan2(r.vs_y, r.vs_x)
+    ang_vels = np.append(hs[1:] - hs[:-1], 0.0)
     return KinMPCRes(
         xs=r.xs,
         ys=r.ys,
         vs=np.sqrt(r.vs_x ** 2 + r.vs_y ** 2),
         hs=np.arctan2(r.vs_y, r.vs_x),
         accs=np.sqrt(r.as_x ** 2 + r.as_y ** 2),
-        ang_vels=np.zeros(len(r.vs_x)),
+        ang_vels=ang_vels
     )

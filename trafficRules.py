@@ -163,7 +163,7 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
         # front_pot = (front_v ** 2) / (-2 * np.abs(acc_min))
         # safe_dist = behind_pot - front_pot + front_v * reaction_time
         # safe_dist = front_pot - behind_pot + behind_v * reaction_time
-        safe_dist = 0.0
+        safe_dist = behind_car.obstacle_shape.length / 2.0 + front_car.obstacle_shape.length / 1.0 #0.0
 
         dist = rear(front_car, s)[0] - front(behind_car, s)[0]
 
@@ -365,9 +365,10 @@ def safe_dist_rule_multi(ego_car: Obstacle, other_cars: List[Obstacle], lane_cen
                            in_front_of(other_car, ego_car)])
         cutting_behaviour = Neg(O(
             And([cut_in(ego_car, other_car, lane_centres, lane_widths),
-                 H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 2)
+                 H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 1)
                  ]), 0, t_cut_in))
         lhs = And([positioning, cutting_behaviour])
+        # lhs = positioning
 
         rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
         safe_dist_conds.append(G(Implies(lhs, rhs), 0, np.inf))

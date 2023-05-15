@@ -40,24 +40,29 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
     ay = cp.Variable(T)
     us = cp.vstack((ax, ay))
 
+    # Obstacles Predicted locations/velocities
+    obs_xs = cp.Parameter((len(obstacles), T))
+    obs_ys = cp.Parameter((len(obstacles), T))
+    obs_v_x = cp.Parameter((len(obstacles), T))
+
     # z_dot = Az @ zs + Bz @ us
 
     # w_gx = 0.0
     w_gy = 1.0
-    w_ga = 0.01
+    w_ga = 0.1
     w_j = 0.1
     w_v = 1.0
 
-    exp_cost = cp.sum(cp.exp(-x))
-
+    # exp_cost = cp.sum(cp.abs(obs_xs - obs_xs))
     # prog_x = cp.sum_squares(x - tc.x_goal)
     vel_track = cp.sum_squares(vx - tc.v_goal)
     deviation_y = cp.sum_squares(y - tc.lanes[0])
     min_lat_accs = cp.sum_squares(ay)
     min_jerk = cp.sum_squares(ay[1:] - ay[:-1])
 
-    obj = cp.Minimize(exp_cost +
+    obj = cp.Minimize(
         w_gy * deviation_y + w_v * vel_track + w_ga * min_lat_accs + w_j * min_jerk)  # + w_ga * min_lat_accs)  # + w_ga * min_lat_accs)
+    # obj = cp.Minimize(exp_cost)
 
     start_params = cp.Parameter(4)
 
@@ -108,10 +113,6 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
 
     M = 10000
 
-    obs_xs = cp.Parameter((len(obstacles), T))
-    obs_ys = cp.Parameter((len(obstacles), T))
-    obs_v_x = cp.Parameter((len(obstacles), T))
-
     obs_avoid_cs = []
     obs_fl_cs = []
     for i, o in enumerate(obstacles):
@@ -126,18 +127,24 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
 
         diag_d = np.sqrt(tc.car_length ** 2 + tc.car_width ** 2) / 2.0
 
-        o_xmin = obs_xs[i, :] - (o_l / 2.0) - diag_d
-        o_xmax = obs_xs[i, :] + (o_l / 2.0) + diag_d
-        o_ymin = obs_ys[i, :] - (o_w / 2.0) - diag_d
-        o_ymax = obs_ys[i, :] + (o_w / 2.0) + diag_d
+        o_xmin = obs_xs[i, :] - (o_l / 2.0) - diag_d  # tc.car_length / 2.0
+        o_xmax = obs_xs[i, :] + (o_l / 2.0) + diag_d  # tc.car_length / 2.0
+        o_ymin = obs_ys[i, :] - (o_w / 2.0) - diag_d  # tc.car_width / 2.0
+        o_ymax = obs_ys[i, :] + (o_w / 2.0) + diag_d  # tc.car_width / 2.0
 
         b_col = cp.Variable((T, 4), boolean=True)
 
+        # TODO: Could expand the xmin to take the potentials into account?
+        # behind_pot = (vx ** 2) / (-2 * tc.acc_max)
+        # front_pot = (obs_v_x[i, :] ** 2) / (-2 * tc.acc_max)
+        # safe_dist = behind_pot - front_pot + front_v * reaction_time
+        # safe_dist = front_pot - behind_pot + vx * 0.1
+
         disj_cs = [
-            x <= o_xmin + M * b_col[:, 0],
-            o_xmax <= x + M * b_col[:, 1],
-            y <= o_ymin + M * b_col[:, 2],
-            o_ymax <= y + M * b_col[:, 3],
+            x + tc.dt * vx + tc.dt ** 2 * ax <= o_xmin + M * b_col[:, 0],
+            o_xmax + tc.dt * vx + tc.dt ** 2 * ax <= x + M * b_col[:, 1],
+            y + tc.dt * vy + tc.dt ** 2 * ay <= o_ymin + M * b_col[:, 2],
+            o_ymax + tc.dt * vy + tc.dt ** 2 * ay <= y + M * b_col[:, 3],
             cp.sum(b_col, axis=1) <= 3
         ]
 
@@ -148,6 +155,7 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
             x <= o_xmin - fb_slack + M * b_f_left[:, 0],
             o_xmax <= x - fb_slack + M * b_f_left[:, 1],
             o_ymax <= y + M * b_f_left[:, 2],
+            # obs_ys[i, :] <= y + M * b_f_left[:, 2],
             vx + tc.dt * ax <= obs_v_x[i, :] + M * b_f_left[:, 3],
             # ax <= 0.0 + M * b_f_left[:, 4],
             # x[1:] - x[:-1] <= obs_v_x[i, 1:] - obs_v_x[i, :-1] + M * b_f_left[1:, 3],
@@ -156,7 +164,6 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
 
         obs_avoid_cs.extend(disj_cs)
         obs_fl_cs.extend(faster_left_constraint)
-
 
     constraints = [
         *start_constraint,
@@ -167,7 +174,7 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
         *vel_lims,
         *f_dyns,
         *obs_avoid_cs,
-        *obs_fl_cs
+        # *obs_fl_cs
     ]
 
     prob = cp.Problem(obj, constraints)
@@ -175,23 +182,26 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
     return CVXInterstateProblem(prob, start_params, obs_xs, obs_ys, obs_v_x, x, y, vx, vy, ax, ay)
 
 
-def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_longs, pred_lats) -> Optional[PointMPCResult]:
+def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_longs, pred_lats) -> Optional[
+    PointMPCResult]:
     prob_config.start_params.value = [start_state.position[0],
-                          start_state.position[1],
-                          np.cos(start_state.orientation) * start_state.velocity,
-                          np.sin(start_state.orientation) * start_state.velocity]
+                                      start_state.position[1],
+                                      np.cos(start_state.orientation) * start_state.velocity,
+                                      np.sin(start_state.orientation) * start_state.velocity]
 
     prob_config.obs_xs.value = np.stack([pred_longs[o.obstacle_id][:, 0] for o in obstacles])
     prob_config.obs_ys.value = np.stack([pred_lats[o.obstacle_id][:, 0] for o in obstacles])
     prob_config.obs_v_x.value = np.stack([pred_longs[o.obstacle_id][:, 1] for o in obstacles])
 
     start_time = time.time()
+    # print(cp.installed_solvers())
     prob_config.prob.solve(solver="GUROBI")
     # print("Solve Time: ", time.time() - start_time)
     # print(prob_config.prob.solution.status)
 
     if prob_config.prob.solution.status == cp.OPTIMAL:
-        return PointMPCResult(xs=np.array(prob_config.xs.value), ys=np.array(prob_config.ys.value), vs_x=np.array(prob_config.vs_x.value),
+        return PointMPCResult(xs=np.array(prob_config.xs.value), ys=np.array(prob_config.ys.value),
+                              vs_x=np.array(prob_config.vs_x.value),
                               vs_y=np.array(prob_config.vs_y.value),
                               as_x=np.array(prob_config.as_x.value), as_y=np.array(prob_config.as_y.value))
 
@@ -221,7 +231,7 @@ def run():
                              lane_targets=[],
                              collision_field_slope=1.0)
 
-    start_state = InitialState(position=np.array([10.0, ego_lane_centres[0]]), velocity=task_config.v_goal * 0.2,
+    start_state = InitialState(position=np.array([10.0, ego_lane_centres[0]]), velocity=task_config.v_goal - 15.0,
                                orientation=0, time_step=0)
     T = int(round(end_time / task_config.dt))
 

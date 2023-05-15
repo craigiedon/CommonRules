@@ -1,15 +1,15 @@
 {
   "x_prog":0.0,
   "y_prog":0.0,
-  "acc":1.0,
-  "ang_v":10,
-  "jerk":2,
-  "v_track":5,
-  "lane_align":10.0,
-  "road_align":1,
-  "collision_pot":10,
-  "faster_left": 10,
-  "braking" : 10
+  "acc":5.0,
+  "ang_v":0.1,
+  "jerk":0.1,
+  "v_track":1.0,
+  "lane_align": 0.1,
+  "road_align":0,
+  "collision_pot":250.0,
+  "faster_left": 0,
+  "braking" : 3
 }
 
 

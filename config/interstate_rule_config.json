@@ -1,7 +1,7 @@
 {
   "dt": 0.1,
-  "t_cut_in": 3.0,
-  "reaction_time": 0.3,
+  "t_cut_in": 0.3,
+  "reaction_time": 1.0,
   "acc_min": -10.5,
   "max_vel": 36.6,
   "slow_delta": 15.0,

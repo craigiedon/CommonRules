@@ -35,7 +35,7 @@ def run():
     lane_widths = np.abs((ego_lane_centres[0] - ego_lane_centres[1]) / 2.0)
 
     goal_state = planning_problem_set.find_planning_problem_by_id(1).goal.state_list[0].position.center
-    end_time = 5.0
+    end_time = 4.0
     task_config = TaskConfig(dt=0.1,
                              x_goal=goal_state[0],
                              y_goal=goal_state[1],
@@ -43,15 +43,15 @@ def run():
                              car_length=4.298,
                              car_width=1.674,
                              v_goal=31.29,  # == 70mph
-                             v_max=45.8,
+                             v_max=36.6,
                              acc_max=11.5,
                              ang_vel_max=0.5,
                              lanes=ego_lane_centres,
                              lane_targets=[],
                              # collision_field_slope=1e-5)
-                             collision_field_slope=0.9)
+                             collision_field_slope=0.01)
 
-    start_state = InitialState(position=np.array([10.0, ego_lane_centres[0]]), velocity=task_config.v_goal * 0.3,
+    start_state = InitialState(position=np.array([0.0 + task_config.car_length / 2.0, ego_lane_centres[0]]), velocity=task_config.v_max - 15,
                                orientation=0, acceleration=0.0, time_step=0)
 
     with open("config/cost_weights.json", 'r') as f:
@@ -82,15 +82,11 @@ def run():
     with open("config/interstate_rule_config.json", 'r') as f:
         irc = InterstateRulesConfig(**json.load(f))
 
-    # TODO Run 100 Receding Horizon Kalmans,
-    # TODO: Log Results,
-    # TODO: and Log STL Monitors on them (Also...time it maybe? We can see if this sampling thing is in any way actually viable...)
-
     results_folder_path = f"results/kal_mpc_res_{datetime.datetime.now().strftime('%y-%m-%d-%H-%M-%S')}"
     os.mkdir(results_folder_path)
     rep_rob_vals = []
 
-    for i in tqdm(range(10000)):
+    for i in tqdm(range(100000)):
     # for i in tqdm(range(5)):
     #     kalman_start = time.time()
         dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.0, start_state, scenario, task_config,
@@ -115,7 +111,7 @@ def run():
         for rule_name, rule in rules.items():
             rob_val = stl_rob(rule, solution_state_dict, 0)
             rob_vals.append(rob_val)
-            # print(f"{rule_name}:\t {rob_val}")
+            print(f"{rule_name}:\t {rob_val}")
 
         rep_rob_vals.append(rob_vals)
 
@@ -126,7 +122,7 @@ def run():
         fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
         # if np.any(np.array(rob_vals) < 0):
-        # animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
+        animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
 
 
         ## Then...calc and print out the results here!

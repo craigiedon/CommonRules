@@ -92,12 +92,12 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
     lane_params = opti.parameter(len(task.lanes))
     opti.set_value(lane_params, task.lanes)
 
-    x_span = max(1.0, abs(task.x_goal - start_state.position[0]))
-    y_span = max(1.0, abs(task.y_goal - start_state.position[1]))
+    # x_span = max(1.0, abs(task.x_goal - start_state.position[0]))
+    # y_span = max(1.0, abs(task.y_goal - start_state.position[1]))
 
     # Distance to destination cost
-    x_progress_cost = casadi.sumsqr((xs - task.x_goal) / x_span)  # / (start_state.x - task.x_goal))
-    y_progress_cost = casadi.sumsqr((ys - task.y_goal) / y_span)  # / (start_state.y - task.y_goal))
+    # x_progress_cost = casadi.sumsqr((xs - task.x_goal) / x_span)  # / (start_state.x - task.x_goal))
+    y_progress_cost = casadi.sumsqr((ys - task.y_goal))  # / (start_state.y - task.y_goal))
 
     # Track the reference velocity
     vel_track_cost = casadi.sumsqr(vs - task.v_goal)
@@ -124,80 +124,97 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
         assert e_ts > s_ts
         opti.subject_to(lane_selectors[s_ts:e_ts, lt.value] == 1.0)
 
-    lane_diffs = ((ys - casadi.repmat(lane_params, 1, T).T) ** 2)
+    # lane_diffs = ((ys - casadi.repmat(lane_params, 1, T).T) ** 2)
+    lane_diffs = (ys - casadi.repmat(lane_params, 1, T).T)
     chosen_lanes = lane_selectors * lane_diffs
-    lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
+    # lane_align_cost = casadi.sum2(casadi.sum1(chosen_lanes))
+    lane_align_cost = casadi.sumsqr(chosen_lanes)
+
+    vxs = vs * casadi.cos(hs)
+    axs = accs * casadi.cos(hs)
+
+    vys = vs * casadi.sin(hs)
+    ays = vs * casadi.sin(hs)
 
     # Obstacle Avoidance (Potential Fields)
-    lateral_slack = 0.0
     if len(obstacles) > 0:
         d_pots = []
         for obs in obstacles:
             d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
             d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
 
-            # d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2
-            d_dist_x = (xs - d_xs) ** 2 - 3# - (obs.obstacle_shape.length + 5) ** 2
-            x_pot = casadi.exp(-task.collision_field_slope * d_dist_x) - casadi.exp(task.collision_field_slope * 3)# - casadi.exp(task.collision_field_slope * (obs.obstacle_shape.length + 5) ** 2)
+            # y_left_slack = 50
+            # Note: We have half a car length of slack as our distance boundary
+            d_diffs_x = (0.5 * obs.obstacle_shape.length + task.car_length + (vxs * task.dt) + (
+                        axs * task.dt ** 2) + 3) - casadi.fabs(xs - d_xs)
 
-            # d_dist_y = ((ys - d_ys) / (obs.obstacle_shape.width + lateral_slack)) ** 2
+            d_diffs_y = (0.5 * obs.obstacle_shape.width + task.car_width + 1.5 + (vys * task.dt) + (
+                        ays * task.dt ** 2)) - casadi.fabs(ys - d_ys)
 
-            yg_slope = 0.5
-            y_gate = 1.0 / (1.0 + casadi.exp(yg_slope * ((ys - d_ys) ** 2 - obs.obstacle_shape.width ** 2)) - casadi.exp(-yg_slope * obs.obstacle_shape.width ** 2))
+            sharp = 10
+            d_dist_x = casadi.log(1 + casadi.exp(sharp * d_diffs_x)) / sharp
+            d_dist_y = casadi.log(1 + casadi.exp(sharp * d_diffs_y)) / sharp
 
-            avoidance_pot = y_gate * x_pot
-            # avoidance_pot = x_pot
+            avoidance_pot = casadi.fmin(d_dist_x, d_dist_y)
 
             d_pots.append(avoidance_pot)
 
-            # d_pots.append(casadi.exp(-task.collision_field_slope * (d_dist_x + d_dist_y)))
         d_pots = casadi.vcat(d_pots)
-        obs_cost = casadi.sum2(casadi.sum1(d_pots))
+        # obs_cost = casadi.sum2(casadi.sum1(d_pots))
+        obs_cost = casadi.sumsqr(d_pots)
     else:
         obs_cost = 0.0
 
     # No moving faster than left traffic
-    if len(obstacles) > 0:
-        f_left_costs = []
-        for obs in obstacles:
-            d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
-            d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
-
-            d_x_vs = obs_pred_longs[obs.obstacle_id][:, 1]
-            d_y_vs = obs_pred_lats[obs.obstacle_id][:, 1]
-            d_vs = np.sqrt((d_x_vs ** 2) + (d_y_vs ** 2))
-
-            d_dist_x = ((xs - d_xs) / obs.obstacle_shape.length) ** 2.0
-            # d_dist_y = casadi.fmax(0.0, (d_ys + obs.obstacle_shape.width / 2.0) - (ys - task.car_width / 2.0))
-            x_pot = 100 * casadi.exp(-10 * d_dist_x)
-
-            d_offset_ys = ys - d_ys
-            y_pot = 1.0 / (1.0 + casadi.exp(10.0 * d_offset_ys)) # Sigmoid Squashing
-
-            vel_diffs = casadi.fmax(vs - d_vs, 0.0)
-
-
-            f_left_costs.append(casadi.fmin(y_pot, x_pot) * vel_diffs)
-        f_lefts_combined = casadi.vcat(f_left_costs)
-        f_left_cost = casadi.sumsqr(f_lefts_combined)
-    else:
-        f_left_cost = 0.0
+    # if len(obstacles) > 0:
+    #     f_left_costs = []
+    #     for obs in obstacles:
+    #         d_xs = obs_pred_longs[obs.obstacle_id][:, 0]
+    #         d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
+    #
+    #         d_x_vs = obs_pred_longs[obs.obstacle_id][:, 1]
+    #         # d_y_vs = obs_pred_lats[obs.obstacle_id][:, 1]
+    #         # d_vs = np.sqrt((d_x_vs ** 2) + (d_y_vs ** 2))
+    #
+    #         d_diffs_x = (0.5 * obs.obstacle_shape.length + task.car_length) - casadi.fabs(xs - d_xs)
+    #         # d_diffs_y = d_ys - ys
+    #         # d_diffs_v = vs - d_x_vs
+    #         fl_slack = 100
+    #         d_diffs_y = (0.5 * obs.obstacle_shape.width + task.car_width + fl_slack) - casadi.fabs(ys - (d_ys - fl_slack))
+    #
+    #         sharp = 10
+    #         xp = (casadi.log(1 + casadi.exp(sharp * d_diffs_x)) / sharp)
+    #         yp = (casadi.log(1 + casadi.exp(sharp * d_diffs_y)) / sharp)
+    #         # vp = casadi.log(1 + casadi.exp(sharp * d_diffs_v)) / sharp
+    #
+    #         # f_left_costs.append(casadi.fmin(xp, yp))
+    #         # f_left_costs.append(casadi.fmin(casadi.fmin(vp, yp), xp))
+    #         lge_meth = -casadi.log(casadi.exp(-xp) + casadi.exp(-yp))
+    #         f_left_costs.append(casadi.fmin(xp, yp))
+    #         # f_left_costs.append(lge_meth)
+    #         # f_left_costs.append(casadi.fmin(vp, xp))
+    #
+    #     f_lefts_combined = casadi.vcat(f_left_costs)
+    #     # f_left_cost = casadi.sumsqr(f_lefts_combined)
+    #     f_left_cost = casadi.sum2(casadi.sum1(f_lefts_combined))
+    # else:
+    f_left_cost = 0.0
 
     if cw is None:
         cw = CostWeights()
 
-    opti.minimize(cw.x_prog * x_progress_cost +
-                  cw.y_prog * y_progress_cost +
-                  cw.v_track * vel_track_cost +
-                  cw.acc * acc_cost +
-                  cw.ang_v * ang_vel_cost +
-                  cw.jerk * jerk_cost +
-                  cw.road_align * road_align_cost +
-                  cw.lane_align * lane_align_cost +
-                  cw.collision_pot * obs_cost +
-                  cw.faster_left * f_left_cost +
-                  cw.braking * braking_cost
-                  )
+    opti.minimize(  # cw.x_prog * x_progress_cost +
+        cw.y_prog * y_progress_cost +
+        cw.v_track * vel_track_cost +
+        cw.acc * acc_cost +
+        cw.ang_v * ang_vel_cost +
+        cw.jerk * jerk_cost +
+        cw.road_align * road_align_cost +
+        cw.lane_align * lane_align_cost +
+        cw.collision_pot * obs_cost +
+        cw.faster_left * f_left_cost +
+        cw.braking * braking_cost
+    )
 
     # Start State Constraints
     opti.subject_to(xs[0] == start_state.position[0])
@@ -214,8 +231,8 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
     opti.subject_to(opti.bounded(0, casadi.vec(lane_selectors), 1))
 
     # Lane Bounds
-    opti.subject_to(opti.bounded(task.y_bounds[0] + task.car_width / 2.0, casadi.vec(ys),
-                                 task.y_bounds[1] - task.car_width / 2.0))
+    opti.subject_to(opti.bounded(task.y_bounds[0] + task.car_width / 2.0 + 0.4, casadi.vec(ys),
+                                 task.y_bounds[1] - task.car_width / 2.0 - 0.4))
 
     # State Evolution
     opti.subject_to(xs[1:] == xs[:-1] + casadi.cos(hs[:-1]) * vs[:-1] * task.dt)
@@ -645,15 +662,15 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
 
         cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, pred_longs, pred_lats)
         if cvx_warm is not None:
-            res = point_to_kin_res(cvx_warm)
-            # warm_start = point_to_kin_res(cvx_warm)
+            # res = point_to_kin_res(cvx_warm)
+            warm_start = point_to_kin_res(cvx_warm)
         else:
-            # warm_start = None
+            warm_start = None
         # if cvx_warm is not None:
         #     res = point_to_kin_res(cvx_warm)
         # else:
-            res = car_mpc(prediction_steps + 1, current_state, task_config,
-                          scenario.obstacles, pred_longs, pred_lats, cws, None)
+        res = car_mpc(prediction_steps + 1, current_state, task_config,
+                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
                                     acceleration=res.accs[1], time_step=i)

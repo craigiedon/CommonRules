@@ -79,7 +79,7 @@ def run():
 
     lane_centres = [-1.75, 1.75, 5.25]
     main_cw_cs = lane_centres[1:]
-    access_cs = lane_centres[:1]
+    access_cs = lane_centres[0:1]
     lane_widths = 3.5
 
     rule_dict = gen_interstate_rules(ego_id, scenario, lane_centres, lane_widths, main_cw_cs, access_cs, irc)
