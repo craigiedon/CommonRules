@@ -163,7 +163,7 @@ def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min:
         # front_pot = (front_v ** 2) / (-2 * np.abs(acc_min))
         # safe_dist = behind_pot - front_pot + front_v * reaction_time
         # safe_dist = front_pot - behind_pot + behind_v * reaction_time
-        safe_dist = behind_car.obstacle_shape.length / 2.0 + front_car.obstacle_shape.length / 1.0 #0.0
+        safe_dist = front_car.obstacle_shape.length # Define Safety as: "one car length of distance"
 
         dist = rear(front_car, s)[0] - front(behind_car, s)[0]
 
@@ -196,8 +196,11 @@ def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_cent
     def abrupt_difference(behind_car: Obstacle, front_car: Obstacle) -> STLExp:
         def acc_diff(s: Dict[int, CustomState]) -> float:
             b_acc = s[behind_car.obstacle_id].acceleration
-            f_acc = s[front_car.obstacle_id].acceleration
+            f_acc = min(0.0, s[front_car.obstacle_id].acceleration)
             diff = b_acc - f_acc
+            # if b_acc < 0 and diff < a_abrupt:
+            #     print("Acc Diff")
+
             return diff
 
         return LEQc(acc_diff, a_abrupt)

@@ -2,6 +2,7 @@ import copy
 import datetime
 import json
 import os
+import pickle
 import time
 import torch
 
@@ -14,6 +15,7 @@ from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
 from commonroad.scenario.state import InitialState
 from commonroad.scenario.trajectory import Trajectory
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 from CarMPC import kalman_receding_horizon, pem_observation_batch
@@ -88,11 +90,17 @@ def run():
 
     for i in tqdm(range(100000)):
     # for i in tqdm(range(5)):
-    #     kalman_start = time.time()
-        dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.0, start_state, scenario, task_config,
-                                                                  long_models, lat_models, observation_func,
-                                                                  cws)
-        # print(f"Took {time.time() - kalman_start}s")
+
+        try:
+            # kalman_start = time.time()
+            dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.0, start_state, scenario, task_config,
+                                                                      long_models, lat_models, observation_func, cws)
+            # print(f"Took {time.time() - kalman_start}s")
+        except Exception as e:
+            print("Exception", e)
+            print("Failed to solve, skipping")
+            continue
+
         solution_scenario = copy.deepcopy(scenario)
         ego_soln_obj = mpc_result_to_dyn_obj(100, dn_state_list, task_config.car_width,
                                              task_config.car_length)
@@ -111,19 +119,24 @@ def run():
         for rule_name, rule in rules.items():
             rob_val = stl_rob(rule, solution_state_dict, 0)
             rob_vals.append(rob_val)
-            print(f"{rule_name}:\t {rob_val}")
+            if rule_name == "rg_4" and rob_val < 0.0:
+                print("Got an rg_4 failure!: ", rob_val)
+            # print(f"{rule_name}:\t {rob_val}")
 
         rep_rob_vals.append(rob_vals)
 
         np.savetxt(os.path.join(results_folder_path, "rule_rob_vals.txt"), rep_rob_vals, fmt="%.4f")
+        with open(os.path.join(results_folder_path, f"prediction_stats_{i}.pkl"), 'wb') as f:
+            pickle.dump(prediction_stats, f)
 
         scenario_save_path = os.path.join(results_folder_path, f"kal_mpc_{i}.xml")
         fw = CommonRoadFileWriter(solution_scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
         fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
         # if np.any(np.array(rob_vals) < 0):
-        animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
-
+        # animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
+        # plt.plot([s.acceleration for s in dn_state_list])
+        # plt.show()
 
         ## Then...calc and print out the results here!
 

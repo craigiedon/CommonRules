@@ -144,8 +144,8 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
             d_ys = obs_pred_lats[obs.obstacle_id][:, 0]
 
             # y_left_slack = 50
-            # Note: We have half a car length of slack as our distance boundary
-            d_diffs_x = (0.5 * obs.obstacle_shape.length + task.car_length + (vxs * task.dt) + (
+            # Note: We have a car length of slack as our distance boundary
+            d_diffs_x = (0.5 * obs.obstacle_shape.length + 1.5 * task.car_length + (vxs * task.dt) + (
                         axs * task.dt ** 2) + 3) - casadi.fabs(xs - d_xs)
 
             d_diffs_y = (0.5 * obs.obstacle_shape.width + task.car_width + 1.5 + (vys * task.dt) + (
@@ -487,20 +487,17 @@ def pem_observation_batch(obs: List[Obstacle],
                           norm_mus: torch.Tensor,
                           norm_stds: torch.Tensor,
                           o_viz: np.ndarray,
-                          ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+                          ) -> Tuple[List[Optional[np.ndarray]], List[Optional[np.ndarray]]]:
     # Get the ego vehicle's x,y
     rot_frame = rot_mat(-ego_state.orientation)
     ego_pos = ego_state.position
 
-    obs_offsets = np.array([tru_long_states[:, 0] - ego_pos[0], tru_lat_states[:, 0] - ego_pos[1]])
     s_longs, s_lats = rot_frame @ np.array([tru_long_states[:, 0] - ego_pos[0], tru_lat_states[:, 0] - ego_pos[1]])
 
     obs_rots = np.array([o.state_at_time(t).orientation for o in obs])
     s_rs = torch.tensor(angle_diff(obs_rots, ego_state.orientation), dtype=torch.float)
 
     s_dims = torch.tensor([[o.obstacle_shape.length, o.obstacle_shape.width, 1.7] for o in obs], dtype=torch.float)
-    # s_dims = [o.obstacle_shape.length, o.obstacle_shape.width, 1.7]
-    # s_viz = (4 - 1) / 3.0
 
     state_tensor = torch.column_stack([torch.tensor(s_longs, dtype=torch.float),
                                        torch.tensor(s_lats, dtype=torch.float),

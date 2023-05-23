@@ -49,16 +49,16 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
 
     # w_gx = 0.0
     w_gy = 1.0
-    w_ga = 0.1
-    w_j = 0.1
-    w_v = 1.0
+    w_ga = 10.0
+    w_j = 10
+    w_v = 0.5
 
     # exp_cost = cp.sum(cp.abs(obs_xs - obs_xs))
     # prog_x = cp.sum_squares(x - tc.x_goal)
     vel_track = cp.sum_squares(vx - tc.v_goal)
     deviation_y = cp.sum_squares(y - tc.lanes[0])
     min_lat_accs = cp.sum_squares(ay)
-    min_jerk = cp.sum_squares(ay[1:] - ay[:-1])
+    min_jerk = cp.sum_squares(cp.diff(ay))
 
     obj = cp.Minimize(
         w_gy * deviation_y + w_v * vel_track + w_ga * min_lat_accs + w_j * min_jerk)  # + w_ga * min_lat_accs)  # + w_ga * min_lat_accs)
