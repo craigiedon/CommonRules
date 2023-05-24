@@ -10,6 +10,7 @@ from commonroad.scenario.trajectory import State, Trajectory
 from CarMPC import RectObstacle, car_mpc
 from TaskConfig import TaskConfig, IntervalConstraint, CostWeights
 from anim_utils import animate_scenario
+from utils import obs_long_lats
 
 
 def run():
@@ -41,11 +42,13 @@ def run():
                              # lane_targets=[])
                              lane_targets=[IntervalConstraint(0, (0.0, 0.5)), IntervalConstraint(1, (0.6, 8.0))])
 
-    start_state = InitialState(position=[45.0, lane_centres[0]], velocity=0.0, orientation=0, time_step=0)
+    start_state = InitialState(position=[50.0, lane_centres[0]], velocity=5.0, acceleration=0.0, orientation=0, time_step=0)
 
     start_time = 0.0
     end_time = 8.0
-    res = car_mpc(start_time, end_time, start_state, task_config, [], [],
+    T = int((end_time - start_time) / task_config.dt)
+    tru_longs, tru_lats = obs_long_lats(scenario.obstacles, 0, T)
+    res = car_mpc(T, start_state, task_config, scenario.obstacles, tru_longs, tru_lats,
                   CostWeights(x_prog=0.0001, y_prog=1.0, v_track=20, acc=50, ang_v=1, road_align=1,
                               lane_align=5))
 

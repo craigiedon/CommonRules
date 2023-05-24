@@ -49,7 +49,7 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
 
     # w_gx = 0.0
     w_gy = 1.0
-    w_ga = 10.0
+    w_ga = 50.0
     w_j = 10
     w_v = 0.5
 
@@ -105,8 +105,8 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
     ]
 
     jerk_lims = [
-        (ax[1:] - ax[:-1]) ** 2 <= 20 * tc.dt,
-        (ay[1:] - ay[:-1]) ** 2 <= 20 * tc.dt
+        (ax[1:] - ax[:-1]) ** 2 <= (2 * tc.dt),
+        (ay[1:] - ay[:-1]) ** 2 <= (2 * tc.dt)
         # axj_min <= 0 <= axj_max
         # ayj_min <= 0 <= ayj_max
     ]

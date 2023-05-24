@@ -527,7 +527,7 @@ def pem_observation_batch(obs: List[Obstacle],
         noise_var = noise_vars.cpu().detach()
 
     # Longitudinal observation: Position / Velocity
-    observed_long_pos = tru_long_states[:, 0] + np.random.normal(noise_loc[0, :], noise_var[0, :])
+    observed_long_pos = tru_long_states[:, 0] + np.random.normal(noise_loc[0, :], np.sqrt(noise_var[0, :]))
     observed_long_vel = tru_long_states[:, 1]
     observed_long_state = np.array([observed_long_pos, observed_long_vel]).T
 

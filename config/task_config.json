@@ -1,0 +1,15 @@
+{
+  "dt":0.1,
+  "x_goal": 235,
+  "y_goal": 1.75,
+  "y_bounds": [0.0, 7.0],
+  "car_length":4.298,
+  "car_width":1.674,
+  "v_goal":31.29,
+  "v_max":36.6,
+  "acc_max":11.5,
+  "ang_vel_max":0.5,
+  "lanes":[1.75, 5.25],
+  "lane_targets":[],
+  "collision_field_slope":0.01
+}
