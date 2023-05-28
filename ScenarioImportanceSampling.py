@@ -58,15 +58,42 @@ def calc_lp_from_params(states_tensor, pos_det_probs, reg_mus, reg_vars, stats) 
     T = len(states_tensor)
     num_obs = len(states_tensor[0])
 
-    det_probs = torch.zeros((T, num_obs), dtype=torch.float)
+    # det_probs = torch.zeros((T, num_obs), dtype=torch.float)
     long_log_ps = torch.zeros((T, num_obs), dtype=torch.float)
     lat_log_ps = torch.zeros((T, num_obs), dtype=torch.float)
+
+    det_ind = []
+    for o_stat in ordered_stats:
+        det_ind.append([(1.0 if ol is not None else 0.0) for ol in o_stat.observed_longs])
+
+    det_ind = torch.tensor(det_ind, dtype=torch.float).T.cuda()
+    det_probs = det_ind * pos_det_probs + (1 - det_ind) * (1 - pos_det_probs)
+
+    t_longs = []
+    t_lats = []
+    o_longs = []
+    o_lats = []
+
+    long_noises = []
+    lat_noises = []
+
+    for t in range(0, T):
+        for o_idx in range(0, num_obs):
+
+            t_long = ordered_stats[o_idx].true_longs[t][0]
+            t_lat = ordered_stats[o_idx].true_lats[t][0]
+
+            if ordered_stats[o_idx].true_longs[t] is not None:
+                o_long = ordered_stats[o_idx].observed_longs[t][0]
+                o_lat = ordered_stats[o_idx].observed_lats[t]
+            else:
+                KeepGoingWithTheConversion?
 
     for t in range(0, T):
         for o_idx in range(0, num_obs):
             if ordered_stats[o_idx].observed_longs[t] is not None:
                 # Detection probabilities
-                det_probs[t, o_idx] = pos_det_probs[t, o_idx]
+                # det_probs[t, o_idx] = pos_det_probs[t, o_idx]
 
                 t_long = ordered_stats[o_idx].true_longs[t][0]
                 t_lat = ordered_stats[o_idx].true_lats[t][0]
@@ -83,10 +110,10 @@ def calc_lp_from_params(states_tensor, pos_det_probs, reg_mus, reg_vars, stats) 
 
                 long_log_ps[t, o_idx] = long_log_p
                 lat_log_ps[t, o_idx] = lat_log_p
-            else:
+            # else:
                 # Detection probabilities
                 # (Noise PDF irrelevant if detection missed)
-                det_probs[t, o_idx] = 1 - pos_det_probs[t, o_idx]
+                # det_probs[t, o_idx] = 1 - pos_det_probs[t, o_idx]
 
     # Combine probabilities
     log_det_probs = torch.log(det_probs)
@@ -295,10 +322,42 @@ def ce_score_batch_stable(ep_pem_states, ep_pred_stats, det_pem, reg_pem, imp_sa
     return cross_ents
 
 
+def ce_one_step(ep_pem_states, ep_pred_stats, rep_rob_vals, imp_sampler: nn.Module, det_pem: nn.Module, reg_pem: nn.Module):
+
+    rep_rob_vals = torch.tensor(rep_rob_vals)
+    rrv_1 = sorted(rep_rob_vals[:, 0], reverse=True)
+    ce_thresh = rho_quantile(rrv_1, 0.05, 0.0)
+    ce_opt = torch.optim.Adam(imp_sampler.parameters(), lr=0.01)
+    ce_solver_its = 100
+
+    ce_losses = []
+    orig_pem_lps = torch.stack([log_probs_scenario_traj(pem_s, pred_s, det_pem, reg_pem) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
+    old_imp_sampler_lps = torch.stack([imp_log_probs_scenario_traj(pem_s, pred_s, imp_sampler) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
+    ll_ratios = (orig_pem_lps - old_imp_sampler_lps).detach()
+    indicator_flag = (rep_rob_vals[:, 0] <= ce_thresh).detach()
+
+
+    for ci in range(ce_solver_its):
+        ce_opt.zero_grad()
+        # cross_ents = ce_score_batch_stable(ep_pem_states, ep_pred_stats, det_pem, reg_pem, imp_sampler)
+
+        imp_sampler_lps = torch.stack([imp_log_probs_scenario_traj(pem_s, pred_s, imp_sampler) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
+
+        cross_ents = -(ll_ratios * 0.1).exp() * imp_sampler_lps
+        ce_loss = (indicator_flag * cross_ents).sum() / len(ep_pem_states)
+        print(f"ci: {ci}: ", ce_loss.item())
+        ce_losses.append(ce_loss.item())
+        ce_loss.backward()
+        ce_opt.step()
+
+    # plt.plot(ce_losses)
+    # plt.show()
+
 def run():
-    res_fp = "results/kal_mpc_res_23-05-17-17-47-58"
-    file_path = "results/kal_mpc_res_23-05-16-13-22-16/kal_mpc_0.xml"
-    scenario, planning_problem_set = CommonRoadFileReader(join(res_fp, "kal_mpc_0.xml")).open()
+    # res_fp = "results/kal_mpc_res_23-05-17-17-47-58"
+    # file_path = "results/kal_mpc_res_23-05-16-13-22-16/kal_mpc_0.xml"
+    scenario_fp = "scenarios/Complex.xml"
+    scenario, planning_problem_set = CommonRoadFileReader(scenario_fp).open()
 
     ego_id = 100
     with open("config/interstate_rule_config.json", 'r') as f:
@@ -311,8 +370,8 @@ def run():
 
     T = 40
 
-    with open(join(res_fp, f"prediction_stats_{0}.pkl"), 'rb') as f:
-        loaded_stats: Dict[int, RecedingHorizonStats] = pickle.load(f)
+    # with open(join(res_fp, f"prediction_stats_{0}.pkl"), 'rb') as f:
+    #     loaded_stats: Dict[int, RecedingHorizonStats] = pickle.load(f)
 
     # Load the PEMs here (with normed states)
     det_pem = load_gp_classifier("models/nuscenes/vsgp_class", True)
@@ -323,9 +382,9 @@ def run():
     norm_stds = torch.load("data/nuscenes/inp_stds.pt")
 
     # Calculate the probability density function
-    pem_states = convert_PEM_traj(T, 100, scenario, norm_mus, norm_stds)
-    log_prob = log_probs_scenario_traj(pem_states, loaded_stats, det_pem, reg_pem)
-    print(log_prob)
+    # pem_states = convert_PEM_traj(T, 100, scenario, norm_mus, norm_stds)
+    # log_prob = log_probs_scenario_traj(pem_states, loaded_stats, det_pem, reg_pem)
+    # print(log_prob)
 
     # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.5, 0.5)
     # Save importance sampler weights
@@ -368,7 +427,7 @@ def run():
         for p_ref in all_lane_centres]
 
     results_folder_path = f"results/imp_sampler_res_{datetime.now().strftime('%y-%m-%d-%H-%M-%S')}"
-    os.mkdir(results_folder_path)
+    os.makedirs(results_folder_path, exist_ok=True)
 
     rep_rob_vals = []
     ep_pem_states = []
@@ -404,61 +463,20 @@ def run():
         fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
         # Log the log-probabilities of sample trajectories under the original PEM
-        # ep_pem_states = convert_PEM_traj(T, 100, solution_scenario, norm_mus, norm_stds)
         pem_states = convert_PEM_traj(T, 100, solution_scenario, norm_mus, norm_stds)
         ep_pem_states.append(pem_states)
         ep_pred_stats.append(prediction_stats)
 
         orig_pem_log_prob = log_probs_scenario_traj(pem_states, prediction_stats, det_pem, reg_pem)
-        # print(f"Orig PEM LP: {orig_pem_log_prob}")
 
         # Log the log-probabilities of sampler trajectories under the importance sampler
         imp_sampler_log_prob = imp_log_probs_scenario_traj(pem_states, prediction_stats, imp_sampler)
-        # print(f"Imp PEM LP: {imp_sampler_log_prob}")
 
         ll_ratio = (orig_pem_log_prob - imp_sampler_log_prob)
         likelihood_ratio = torch.exp(ll_ratio)
-        # print("LL Ratio: ", ll_ratio)
-        # print("Likelihood ratio: ", likelihood_ratio)
-
-        # Calculate the cross-entropy score here.
-        # print("Cross Ent: ", -likelihood_ratio * imp_sampler_log_prob)
-
-    # TODO: Calculate the cross-entropy score here (including the adaptive thresholding filter from previous repo...)
-    rep_rob_vals = torch.tensor(rep_rob_vals)
-    rrv_1 = sorted(rep_rob_vals[:, 0], reverse=True)
-    ce_thresh = rho_quantile(rrv_1, 0.05, 0.0)
-
-    # TODO: Run in a minibatch loop with movement. Chart failures, and chart log-likelihoods...
-    ce_opt = torch.optim.Adam(imp_sampler.parameters(), lr=0.01)
-    # imp_params = list(imp_sampler.parameters(), lr=1.0)
-
-    ce_solver_its = 100
-
-    ce_losses = []
-    orig_pem_lps = torch.stack([log_probs_scenario_traj(pem_s, pred_s, det_pem, reg_pem) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
-    old_imp_sampler_lps = torch.stack([imp_log_probs_scenario_traj(pem_s, pred_s, imp_sampler) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
-    ll_ratios = (orig_pem_lps - old_imp_sampler_lps).detach()
-    indicator_flag = (rep_rob_vals[:, 0] <= ce_thresh).detach()
 
 
-    # TODO: Refactor away into functions for sim, thresh calcs, learning, so that we can read the inner loops better
-
-    for ci in range(ce_solver_its):
-        ce_opt.zero_grad()
-        # cross_ents = ce_score_batch_stable(ep_pem_states, ep_pred_stats, det_pem, reg_pem, imp_sampler)
-
-        imp_sampler_lps = torch.stack([imp_log_probs_scenario_traj(pem_s, pred_s, imp_sampler) for pem_s, pred_s in zip(ep_pem_states, ep_pred_stats)])
-
-        cross_ents = -(ll_ratios * 0.1).exp() * imp_sampler_lps
-        ce_loss = (indicator_flag * cross_ents).sum() / len(ep_pem_states)
-        print(f"ci: {ci}: ", ce_loss.item())
-        ce_losses.append(ce_loss.item())
-        ce_loss.backward()
-        ce_opt.step()
-
-    plt.plot(ce_losses)
-    plt.show()
+    ce_one_step(ep_pem_states, ep_pred_stats, rep_rob_vals, imp_sampler, det_pem, reg_pem)
 
 
 
