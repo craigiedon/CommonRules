@@ -606,9 +606,33 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
                              prediction_steps)]
         ) for o in scenario.obstacles}
 
+    pred_longs = {o.obstacle_id: t_state_pred(est_long_res[o.obstacle_id].fused_mu, long_models,
+                                              est_long_res[o.obstacle_id].model_ps, prediction_steps) for
+                  o in scenario.obstacles}
+    pred_lats = {o.obstacle_id: t_state_pred(est_lat_res[o.obstacle_id].fused_mu, lat_models,
+                                             est_lat_res[o.obstacle_id].model_ps, prediction_steps) for o
+                 in scenario.obstacles}
+
     cvx_prob_config = create_cvx_mpc(prediction_steps + 1, task_config, scenario.obstacles)
 
     for i in range(1, T):
+        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, pred_longs, pred_lats)
+        if cvx_warm is not None:
+            # res = point_to_kin_res(cvx_warm)
+            warm_start = point_to_kin_res(cvx_warm)
+        else:
+            warm_start = None
+        # if cvx_warm is not None:
+        #     res = point_to_kin_res(cvx_warm)
+        # else:
+        res = car_mpc(prediction_steps + 1, current_state, task_config,
+                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
+        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
+                                    orientation=res.hs[1],
+                                    acceleration=res.accs[1], time_step=i)
+        dn_state_list.append(current_state)
+
+
         # Calculating Visibilities from Raycasts
         visibilities = car_visibilities_raycast(100, current_state, i, scenario.obstacles)
 
@@ -657,21 +681,6 @@ def kalman_receding_horizon(total_time: float, horizon_length: float, start_stat
         # free = car_mpc(prediction_steps + 1, current_state, task_config,
         #               [], {}, {}, cws, None)
 
-        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, pred_longs, pred_lats)
-        if cvx_warm is not None:
-            # res = point_to_kin_res(cvx_warm)
-            warm_start = point_to_kin_res(cvx_warm)
-        else:
-            warm_start = None
-        # if cvx_warm is not None:
-        #     res = point_to_kin_res(cvx_warm)
-        # else:
-        res = car_mpc(prediction_steps + 1, current_state, task_config,
-                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
-        current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
-                                    orientation=res.hs[1],
-                                    acceleration=res.accs[1], time_step=i)
-        dn_state_list.append(current_state)
 
     for _, td in obs_traj_data.items():
         assert len(td.prediction_traj_lats) == T

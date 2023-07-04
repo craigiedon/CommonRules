@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as F
 from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.scenario.scenario import Scenario
-from torch import nn
+from torch import nn, FloatTensor, Tensor
 from torch.utils.data import TensorDataset, DataLoader
 
 from CarMPC import car_visibilities_raycast, kalman_receding_horizon
@@ -173,7 +173,7 @@ def sample_from_imp_sampler(obs: List[Obstacle],
                                        s_dims,
                                        torch.tensor(o_viz, dtype=torch.float)])
     state_tensor = (state_tensor - norm_mus) / norm_stds
-    state_tensor = state_tensor.cuda()
+    state_tensor: Tensor = state_tensor.cuda()
 
     imp_sam_pem.eval()
     with torch.no_grad():
@@ -201,18 +201,25 @@ def sample_from_imp_sampler(obs: List[Obstacle],
     observed_long_state = [s if r < det_p else None for s, r, det_p in zip(observed_long_state, rands, det_ps)]
     observed_lat_state = [s if r < det_p else None for s, r, det_p in zip(observed_lat_state, rands, det_ps)]
 
+    log_det_prob = torch.log((rands < det_ps) * det_ps + (rands >= det_ps) * (1 - det_ps)).sum()
+    long_log_prob = -F.gaussian_nll_loss(torch.tensor(long_noise, dtype=torch.float), long_n_mu, long_n_var,
+                                         full=True, reduction='none')
+    lat_log_prob = -F.gaussian_nll_loss(torch.tensor(lat_noise, dtype=torch.float), lat_n_mu, lat_n_var, full=True,
+                                        reduction='none')
+    log_noise_prob = (rands < det_ps) * (long_log_prob + lat_log_prob)
+    total_log_prob = log_det_prob + log_noise_prob.sum()
+
     with open(f"results/{samp_probs_f_name}", 'a') as f:
-        log_det_prob = torch.log((rands < det_ps) * det_ps + (rands >= det_ps) * (1 - det_ps)).sum()
-
-        long_log_prob = -F.gaussian_nll_loss(torch.tensor(long_noise, dtype=torch.float), long_n_mu, long_n_var,
-                                             full=True, reduction='none')
-        lat_log_prob = -F.gaussian_nll_loss(torch.tensor(lat_noise, dtype=torch.float), lat_n_mu, lat_n_var, full=True,
-                                            reduction='none')
-        log_noise_prob = (rands < det_ps) * (long_log_prob + lat_log_prob)
-
-        total_log_prob = log_det_prob + log_noise_prob.sum()
-
         np.savetxt(f, total_log_prob.view(1, -1))
+
+    with open(f"results/stateTensors-{samp_probs_f_name}", 'a') as f:
+        np.savetxt(f, state_tensor.detach().cpu().numpy())
+
+    with open(f"results/longNoise-{samp_probs_f_name}", 'a') as f:
+        np.savetxt(f, long_noise)
+
+    with open(f"results/latNoise-{samp_probs_f_name}", 'a') as f:
+        np.savetxt(f, lat_noise)
 
     torch.save(imp_sam_pem.state_dict(), "frozen_imp_sampler.pyt")
 
@@ -324,8 +331,8 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
         cross_ents = -(ll_ratios * 0.1).exp() * imp_sampler_lps
         ce_loss = (indicator_flag * cross_ents).sum() / len(ep_pem_states)
 
-        if not ce_loss.isfinite():
-            print("Infinite/Nan Value")
+        # if not ce_loss.isfinite():
+        #     print("Infinite/Nan Value")
 
         ce_opt.zero_grad()
         ce_loss.backward()
@@ -337,8 +344,8 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
 
     # print("Done with all that then")
 
-    plt.plot(ce_losses)
-    plt.show()
+    # plt.plot(ce_losses)
+    # plt.show()
 
 
 def imp_obs_f(imp_sampler, norm_mus, norm_stds, fname):
@@ -494,6 +501,7 @@ def run():
 
             # Log the log-probabilities of sample trajectories under the original PEM
             # Offset by one because we assume state is known at T = 0
+            # pem_states = convert_PEM_traj(T, 100, solution_scenario, norm_mus, norm_stds)[1:]
             pem_states = convert_PEM_traj(T, 100, solution_scenario, norm_mus, norm_stds)[1:]
             pem_dets, pem_long_noises, pem_lat_noises = dets_and_noise_from_stats(prediction_stats)
 
@@ -502,17 +510,25 @@ def run():
             ep_long_noises.append(pem_long_noises)
             ep_lat_noises.append(pem_lat_noises)
 
+
+            # TODO: Compare the loaded state tensors with the converted pem_states
+            loaded_states = np.loadtxt(f"results/stateTensors-{imp_log_fname}")
+
+            comparable_states = pem_states.reshape(-1, 8).detach().cpu().numpy()
+
+            assert np.isclose(comparable_states, loaded_states).all()
+
             orig_pem_log_prob = log_probs_scenario_traj(pem_states, pem_dets, pem_long_noises, pem_lat_noises, det_pem,
                                                         reg_pem)
-
             # Log the log-probabilities of sampler trajectories under the importance sampler
             imp_sampler_log_prob = imp_log_probs_scenario_traj(pem_states, pem_dets, pem_long_noises, pem_lat_noises,
                                                                imp_sampler)
 
-            # frozen_params = torch.load("frozen_imp_sampler.pyt")
-            # direct_params = imp_sampler.state_dict()
-            # for fpv, dpv in zip(frozen_params.values(), direct_params.values()):
-            #     assert (fpv == dpv).all()
+
+            frozen_params = torch.load("frozen_imp_sampler.pyt")
+            direct_params = imp_sampler.state_dict()
+            for fpv, dpv in zip(frozen_params.values(), direct_params.values()):
+                assert (fpv == dpv).all()
 
             print("Imp Log Prob Direct: ", imp_sampler_log_prob.item())
 
