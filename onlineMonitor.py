@@ -9,14 +9,37 @@ import numpy as np
 from stl import *
 
 
-def horizon(spec: STLExp, parent: Optional[STLExp], running_hor: Optional[Tuple[int, int]]) -> Tuple[int, int]:
-    if parent is None:
-        return 0, 0
-    match parent:
-        case G(e, t_start, t_end) | F(e, t_start, t_end) | U(e, t_start, t_end):
-            return running_hor[0] + t_start, running_hor[1] + t_end
-        case _:
-            return running_hor
+# def horizon(spec: STLExp, parent: Optional[STLExp], running_hor: Optional[Tuple[int, int]]) -> Tuple[int, int]:
+#     if parent is None:
+#         return 0, 0
+#     match parent:
+#         case G(e, t_start, t_end) | F(e, t_start, t_end) | U(e, t_start, t_end):
+#             return running_hor[0] + t_start, running_hor[1] + t_end
+#         case _:
+#             return running_hor
+
+
+def gen_hor_map(spec: STLExp) -> Dict[STLExp, Tuple[int, int]]:
+    h_map: Dict[STLExp, Tuple[int, int]] = {spec: (0, 0)}
+
+    to_visit = [spec]
+    while len(to_visit) > 0:
+        p = to_visit.pop()
+        match p:
+            case (G(_, t_start, t_end) |
+                  F(_, t_start, t_end) |
+                  U(_, _, t_start, t_end) |
+                  H(_, t_start, t_end) |
+                  O(_, t_start, t_end) |
+                  S(_, _, t_start, t_end)):
+                hor = h_map[p][0] + t_start, h_map[p][1] + t_end
+            case _:
+                hor = h_map[p]
+        for c in stl_children(p):
+            h_map[c] = hor
+            to_visit.append(c)
+    # Recurse or bfs/dfs-type search somehow
+    return h_map
 
 
 @dataclass(frozen=True)
@@ -26,7 +49,11 @@ class WorkList:
     ubs: np.ndarray  # Upper Bounds
 
 
-def add_wl_point(wl: WorkList, t, lb, ub) -> WorkList:
+def init_wmap(spec: STLExp) -> Dict[STLExp, WorkList]:
+    return {e: WorkList(np.array([]), np.array([]), np.array([])) for e in stl_tree(spec)}
+
+
+def add_wl_point(wl: WorkList, t: int, lb: float, ub: float) -> WorkList:
     return WorkList(np.append(wl.ts, t), np.append(wl.lbs, lb), np.append(wl.ubs, ub))
 
 
@@ -85,53 +112,113 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             wl_map[spec] = wl_pointwise_op(sub_wls, max)
         case G(e, t_start, t_end):
             update_work_list(wl_map, hor_map, e, x, t)
-            new_lbs = online_sliding_max(wl_map[e].ts, wl_map[e].lbs, t_start, t_end)
-            new_ubs = online_sliding_max(wl_map[e].ts, wl_map[e].ubs, t_start, t_end)
-            # TODO: Is it actually max? Don't we want "min" for always? Im a little confused...
-            # TODO: Answer: No! Its sliding min! (But...you can get this via negations...)
-            wl_map[spec] = online_sliding_max(wl_map[e], t_start, t_end)
+            if len(wl_map[e].ts) > 0:
+                new_lbs = online_min_lemire(wl_map[e].lbs, wl_map[e].ts, t_start, t_end, -np.inf)
+                new_ubs = online_min_lemire(wl_map[e].ubs, wl_map[e].ts, t_start, t_end, np.inf)
+                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
+        case F(e, t_start, t_end):
+            update_work_list(wl_map, hor_map, e, x, t)
+            if len(wl_map[e].ts) > 0:
+                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, t_start, t_end, -np.inf)
+                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, t_start, t_end, np.inf)
+                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
+        case _:
+            raise NotImplementedError
 
 
-def online_sliding_max(ts: np.ndarray, vs: np.ndarray, a: int, b: int) -> np.ndarray:
-    """
-        [a,b] - The lower and upper bounds of the time interval G_[a, b]
-        F - the frontier: set of times of the "descending monotonic edge"
-    """
-    assert a <= b
-    assert len(ts) == len(vs)
-    F = [0]
-    i = 0
+def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: float, b: float, fill_v: float) -> np.ndarray:
+    return -online_max_lemire(-raw_xs, raw_ts, a, b, -fill_v)
 
-    s = t = ts[0] - b
 
-    ys: Dict[int, float] = {}
+def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: int, b: int, fill_v: float) -> np.ndarray:
+    assert a < b
+    # assert raw_ts[0] == a
+    assert len(raw_xs) == len(raw_ts)
 
-    while t + a < ts[-1]:
-        if len(F) > 0:
-            t = min(ts[min(F)] - a, ts[i + 1] - b)
+    U = deque([0])
+    window_maxs = []
+
+    # fill_v = -np.inf
+    width = b - a
+    # assert a == 0 # TODO: Support non-zero a-values safely
+    # assert 0 < width < len(raw_xs)
+
+    # xs = np.pad(raw_xs[a:], (0, width + 1), mode='constant', constant_values=fill_v)
+    # ts = np.concatenate((raw_ts, [raw_ts[-1] + time_pad for time_pad in range(1, width + 2)]))
+    xs = np.pad(raw_xs, (0, width + 1), mode='constant', constant_values=fill_v)
+    ts = np.concatenate((raw_ts, [raw_ts[-1] + time_pad for time_pad in range(1, width + 2)]))
+
+    for i in range(1, len(xs)):
+        t = ts[i]
+        # We've seen at least the full width time-wise, so we can start appending max values now
+        if t - ts[0] > width:
+            window_maxs.append(xs[U[-1]])
+
+        # While the current x-value is bigger than the most recent maxes, keep popping
+        if xs[i] > xs[i - 1]:
+            U.popleft()
+            while len(U) > 0 and xs[i] > xs[U[0]]:
+                U.popleft()
+
+        # Add current value to the front of the queue
+        U.appendleft(i)
+
+        # Slide window if the earliest value has just gone outside time frame
+        if t > width + ts[U[-1]]:
+            U.pop()
+
+    assert len(window_maxs) == len(raw_xs)
+    return np.array(window_maxs)
+
+
+def online_run(spec, xs):
+    h_map = gen_hor_map(spec)
+    wl_map = init_wmap(spec)
+    for t, s in enumerate(xs):
+        update_work_list(wl_map, h_map, spec, s, t)
+        if len(wl_map[spec].ts) > 0:
+            print(f'{t}: lb: {wl_map[spec].lbs[0]} ub:{wl_map[spec].ubs[0]}')
         else:
-            t = ts[i + 1] - b
-
-        if t == ts[i + 1] - b:
-            # Remove every element indexed by the tail of F that is smaller than x_{i+1}
-            while len(F) > 0 and vs[i + 1] >= vs[max(F)]:
-                F.remove(max(F))
-            F.append(i + 1)
-            i = i + 1
-        else:  # Slide window to the right
-            if s > ts[0]:
-                ys[s] = vs[min(F)]
-            else:
-                ys[ts[0]] = vs[min(F)]
-            F.remove(min(F))
-            s = t
-
-    assert len(list(ys.values())) == len(ts)
-    return np.array(list(ys.values()))
+            print(f'{t}: lb: {-np.inf} ub:{np.inf}')
+    print(wl_map)
 
 
-if __name__ == "__main__":
+def run():
+    a = 2
+    b = 1
+    c = 3
+    example_spec = G(Or((Neg(GEQ0(lambda s: s[0])), F(GEQ0(lambda s: s[1]), b, c))), 0, a)
+    h_map = gen_hor_map(example_spec)
+    print(h_map)
     print("Online Monitor Stuff")
     ts = np.arange(10)
     vs = np.array([0.2, 0.5, 0.3, 0.4, 0.6, 0.8, -0.1, 0.4, 1.1, 0.1])
-    res = online_sliding_max(ts, vs, 2, 5)
+    max_res = online_max_lemire(vs, ts, 0, 2, -np.inf)
+    min_res = online_min_lemire(vs, ts, 0, 2, np.inf)
+    print("vs:", vs)
+    print("Maxs:", max_res)
+    print("Mins:", min_res)
+
+    # xs = np.array([1, 2, -1, -2, 2, -1])
+    # ys = np.array([-1, 2, -1, 1, 1, 1])
+    # states = np.column_stack((xs, ys))
+    #
+    # wl_map = init_wmap(example_spec)
+    # for t, s in enumerate(states):
+    #     update_work_list(wl_map, h_map, example_spec, s, t)
+    #     print(f'{t}: lb: {wl_map[example_spec].lbs[0]} ub:{wl_map[example_spec].ubs[0]}')
+    # print(wl_map)
+
+    # another_example = G(F(GEQ0(lambda x: x), 3, 5), 0, 2)
+    another_example = G(GEQ0(lambda x: x), 3, 10)
+
+    states = np.array([100, 3000, 55, -0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3])
+    online_run(another_example, states)
+
+    # TODO: Sanity test that it works on an easy-to-follow example
+    # TODO: Sanity test that it gives the same answer as the batch algorithm at all intermediate points (though note - I think the batch takes an "optimistic" approach to evaluations...)
+    # TODO: So...does it work with your Traffic Rules? What else needs to be added in terms of expressivity?
+
+
+if __name__ == "__main__":
+    run()

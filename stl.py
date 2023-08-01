@@ -2,7 +2,7 @@ import abc
 import dataclasses
 from collections import deque
 from dataclasses import dataclass
-from typing import Callable, Any, List, Optional, Union, Tuple
+from typing import Callable, Any, List, Optional, Union, Tuple, Sequence
 import numpy as np
 from scipy.special import logsumexp
 
@@ -55,16 +55,16 @@ class Neg(STLExp):
 
 @dataclass(frozen=True)
 class And(STLExp):
-    exps: List[STLExp]
+    exps: Tuple[STLExp, ...]
 
 
 @dataclass(frozen=True)
 class Or(STLExp):
-    exps: List[STLExp]
+    exps: Tuple[STLExp, ...]
 
 
 def Implies(e_lhs: STLExp, e_rhs: STLExp) -> STLExp:
-    return Or([Neg(e_lhs), e_rhs])
+    return Or((Neg(e_lhs), e_rhs))
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,32 @@ class H(STLExp):
     t_end: int
 
 
-def remove_nones(x: List) -> List:
+def stl_children(spec: STLExp) -> Sequence[STLExp]:
+    match spec:
+        case And(exps) | Or(exps):
+            return exps
+        case U(e1, e2, _) | S(e1, e2, _):
+            return [e1, e2]
+        case F(e, _, _) | G(e, _, _) | Neg(e) | H(e, _, _) | O(e, _, _):
+            return [e]
+        case GEQ0() | LEQ0() | Tru():
+            return []
+        case _:
+            raise ValueError("Unknown STL Case")
+
+
+def stl_tree(spec: STLExp) -> Sequence[STLExp]:
+    listed_tree = []
+    to_visit = [spec]
+    while len(to_visit) > 0:
+        p = to_visit.pop()
+        listed_tree.append(p)
+        to_visit.extend(stl_children(p))
+    return listed_tree
+
+
+
+def remove_nones() -> List:
     return list(filter(lambda v: v is not None, x))
 
 
