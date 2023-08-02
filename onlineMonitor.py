@@ -9,16 +9,6 @@ import numpy as np
 from stl import *
 
 
-# def horizon(spec: STLExp, parent: Optional[STLExp], running_hor: Optional[Tuple[int, int]]) -> Tuple[int, int]:
-#     if parent is None:
-#         return 0, 0
-#     match parent:
-#         case G(e, t_start, t_end) | F(e, t_start, t_end) | U(e, t_start, t_end):
-#             return running_hor[0] + t_start, running_hor[1] + t_end
-#         case _:
-#             return running_hor
-
-
 def gen_hor_map(spec: STLExp) -> Dict[STLExp, Tuple[int, int]]:
     h_map: Dict[STLExp, Tuple[int, int]] = {spec: (0, 0)}
 
@@ -28,11 +18,12 @@ def gen_hor_map(spec: STLExp) -> Dict[STLExp, Tuple[int, int]]:
         match p:
             case (G(_, t_start, t_end) |
                   F(_, t_start, t_end) |
-                  U(_, _, t_start, t_end) |
-                  H(_, t_start, t_end) |
+                  U(_, _, t_start, t_end)):
+                hor = h_map[p][0] + t_start, h_map[p][1] + t_end
+            case (H(_, t_start, t_end) |
                   O(_, t_start, t_end) |
                   S(_, _, t_start, t_end)):
-                hor = h_map[p][0] + t_start, h_map[p][1] + t_end
+                hor = h_map[p][0] - t_end, h_map[p][1] - t_start
             case _:
                 hor = h_map[p]
         for c in stl_children(p):
@@ -122,8 +113,49 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, t_start, t_end, -np.inf)
                 new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, t_start, t_end, np.inf)
                 wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
-        case _:
+        case U(e_1, e_2, t_start, t_end):
+            assert 0 <= t_start <= t_end
+            assert np.isinf(t_end)
+
+            update_work_list(wl_map, hor_map, e_1, x, t)
+            update_work_list(wl_map, hor_map, e_2, x, t)
+
+            # Lets just do the lower bounds
+            rvs_left = wl_map[e_1]
+            rvs_right = wl_map[e_2]
+
+            # TODO: Is this "pointwise" function actually correct?
+            worst_wls = wl_pointwise_op([rvs_left, rvs_right], min)
+
+            assert len(rvs_left.ts) == len(worst_wls.ts)
+
+            until_lbs = np.zeros(len(worst_wls.ts) + 1)
+            until_lbs[-1] = -np.inf
+            for i in reversed(range(0, len(worst_wls.ts))):
+                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left[i], until_lbs[i+1]))
+
+            until_ubs = np.zeros(len(worst_wls.ts) + 1)
+            until_ubs[-1] = np.inf
+            for i in reversed(range(0, len(worst_wls.ts))):
+                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left[i], until_ubs[i+1]))
+
+            wl_map[spec] = WorkList(worst_wls.ts, until_lbs[:-1], until_ubs[:-1])
+        case O(e, t_start, t_end):
+            update_work_list(wl_map, hor_map, e, x, t)
+            if len(wl_map[e].ts) > 0:
+                raise NotImplementedError
+
+        case H(e, t_start, t_end):
+            update_work_list(wl_map, hor_map, e, x, t)
+            if len(wl_map[e].ts) > 0:
+                raise NotImplementedError
+        case S(e_1, e_2, t_start, t_end):
+            update_work_list(wl_map, hor_map, e_1, x, t)
+            update_work_list(wl_map, hor_map, e_2, x, t)
             raise NotImplementedError
+
+        case _:
+            raise ValueError("STL Expression Not Recognized")
 
 
 def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: float, b: float, fill_v: float) -> np.ndarray:
@@ -134,6 +166,7 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: int, b: int, fi
     assert a < b
     # assert raw_ts[0] == a
     assert len(raw_xs) == len(raw_ts)
+    # TODO: Support unbounded b
 
     U = deque([0])
     window_maxs = []
@@ -171,16 +204,27 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: int, b: int, fi
     return np.array(window_maxs)
 
 
-def online_run(spec, xs):
+def online_run(spec, xs) -> Tuple[np.ndarray, np.ndarray, Dict[STLExp, WorkList]]:
     h_map = gen_hor_map(spec)
     wl_map = init_wmap(spec)
+
+    lb_history = []
+    ub_history = []
     for t, s in enumerate(xs):
         update_work_list(wl_map, h_map, spec, s, t)
         if len(wl_map[spec].ts) > 0:
-            print(f'{t}: lb: {wl_map[spec].lbs[0]} ub:{wl_map[spec].ubs[0]}')
+            # print(f'{t}: lb: {wl_map[spec].lbs[0]} ub:{wl_map[spec].ubs[0]}')
+            lb_history.append(wl_map[spec].lbs[0])
+            ub_history.append(wl_map[spec].ubs[0])
         else:
-            print(f'{t}: lb: {-np.inf} ub:{np.inf}')
+            # print(f'{t}: lb: {-np.inf} ub:{np.inf}')
+            lb_history.append(-np.inf)
+            ub_history.append(np.inf)
     print(wl_map)
+
+    lb_history = np.array(lb_history)
+    ub_history = np.array(ub_history)
+    return lb_history, ub_history, wl_map
 
 
 def run():
