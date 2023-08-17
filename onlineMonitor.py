@@ -52,28 +52,49 @@ def wl_neg(wl: WorkList) -> WorkList:
     return WorkList(wl.ts, -wl.lbs, -wl.ubs)
 
 
+def fill_p_const_signal(desired_ts: List[int], sig_ts: np.ndarray, sig_vs: np.ndarray) -> np.ndarray:
+    assert len(sig_ts) == len(sig_vs)
+    assert len(sig_ts) > 0
+
+    filled_signal = []
+    s_idx = 0
+    for t in desired_ts:
+        while s_idx < len(sig_ts) and sig_ts[s_idx] < t:
+            s_idx += 1
+
+        if s_idx >= len(sig_ts):
+            filled_signal.append(sig_vs[-1])
+        elif s_idx == 0:
+            filled_signal.append(sig_vs[0])
+        else:
+            prev_dist = (sig_ts[s_idx - 1] - t) ** 2
+            curr_dist = (sig_ts[s_idx] - t) ** 2
+            closest_idx = s_idx if curr_dist <= prev_dist else s_idx - 1
+            filled_signal.append(sig_vs[closest_idx])
+    assert len(filled_signal) == len(desired_ts)
+    return np.array(filled_signal)
+
+
 def wl_pointwise_op(wls: List[WorkList], op: Callable) -> WorkList:
     wl_tuples: Dict[int, Tuple[int, int]] = {}
 
-    for wl in wls:
-        for t, lb, ub in zip(wl.ts, wl.lbs, wl.ubs):
-            if t in wl_tuples:
-                wl_tuples[t] = op(wl_tuples[t][0], lb), op(wl_tuples[t][1], ub)
-            else:
-                wl_tuples[t] = (lb, ub)
+    combined_ts: List[int] = sorted(set([t for wl in wls for t in wl.ts]))
 
-    new_ts = np.array(list(wl_tuples.keys()))
-    new_bounds = np.asarray(list(wl_tuples.values()))
+    filled_lbs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.lbs) for wl in wls])
+    filled_ubs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.ubs) for wl in wls])
 
-    return WorkList(new_ts, new_bounds[:, 0], new_bounds[:, 1])
+    merged_lbs = op(filled_lbs, axis=0)
+    merged_ubs = op(filled_ubs, axis=0)
+
+    return WorkList(np.array(combined_ts), merged_lbs, merged_ubs)
 
 
 def wl_min(wls: List[WorkList]) -> WorkList:
-    return wl_pointwise_op(wls, min)
+    return wl_pointwise_op(wls, np.min)
 
 
 def wl_max(wls: List[WorkList]) -> WorkList:
-    return wl_pointwise_op(wls, max)
+    return wl_pointwise_op(wls, np.max)
 
 
 def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]],
@@ -95,12 +116,12 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             for e in exps:
                 update_work_list(wl_map, hor_map, e, x, t)
             sub_wls = [wl_map[e] for e in exps]
-            wl_map[spec] = wl_pointwise_op(sub_wls, min)
+            wl_map[spec] = wl_min(sub_wls)
         case Or(exps):
             for e in exps:
                 update_work_list(wl_map, hor_map, e, x, t)
             sub_wls = [wl_map[e] for e in exps]
-            wl_map[spec] = wl_pointwise_op(sub_wls, max)
+            wl_map[spec] = wl_max(sub_wls)
         case G(e, t_start, t_end):
             update_work_list(wl_map, hor_map, e, x, t)
             if len(wl_map[e].ts) > 0:
@@ -132,12 +153,12 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             until_lbs = np.zeros(len(worst_wls.ts) + 1)
             until_lbs[-1] = -np.inf
             for i in reversed(range(0, len(worst_wls.ts))):
-                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left[i], until_lbs[i+1]))
+                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left[i], until_lbs[i + 1]))
 
             until_ubs = np.zeros(len(worst_wls.ts) + 1)
             until_ubs[-1] = np.inf
             for i in reversed(range(0, len(worst_wls.ts))):
-                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left[i], until_ubs[i+1]))
+                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left[i], until_ubs[i + 1]))
 
             wl_map[spec] = WorkList(worst_wls.ts, until_lbs[:-1], until_ubs[:-1])
         case O(e, t_start, t_end):
