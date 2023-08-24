@@ -44,6 +44,22 @@ def test_unnestedF():
     assert np.all(ub_res == np.array([np.inf, np.inf, np.inf, 2]))
 
 
+def test_g_nonzero_start_inf_end():
+    spec = G(GEQ0(lambda x: x), 2, np.inf)
+    xs = np.array([-1, 0, 2, -5])
+    lb_res, ub_res, res_map = online_run(spec, xs)
+
+    assert np.all(lb_res == [-np.inf, -np.inf, 2, -5])
+    assert np.all(ub_res == [np.inf, np.inf, 2, -5])
+
+
+# TODO: Test 0, inf outer, finite nested offest
+# TODO: Test 0, inf outer, infinite nested offset
+# TODO: Test offset inf outer, offset infinite nested
+# TODO: Test 0, inf outer, offset "1-width" nested
+# TODO: Test until hasn't broken
+# TODO: Alter the time stamps to subtract on the temporal stuff
+
 def test_unnestedF_unbounded():
     spec = F(GEQ0(lambda x: x), 1, np.inf)
     xs = np.array([-1, 0, 2, -5])
