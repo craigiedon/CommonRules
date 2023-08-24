@@ -122,26 +122,31 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 update_work_list(wl_map, hor_map, e, x, t)
             sub_wls = [wl_map[e] for e in exps]
             wl_map[spec] = wl_max(sub_wls)
-        case G(e, t_start, t_end):
+        case G(e, t_start_raw, t_end_raw):
+            update_work_list(wl_map, hor_map, e, x, t)
+            t_end = min(t, t_end_raw)
+            if t_end <= hor[0]:
+                print("Not yet relevant")
+            elif len(wl_map[e].ts) > 0:
+                new_lbs = online_min_lemire(wl_map[e].lbs, wl_map[e].ts, t_start_raw, t_end, -np.inf)
+                new_ubs = online_min_lemire(wl_map[e].ubs, wl_map[e].ts, t_start_raw, t_end, np.inf)
+                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
+        case F(e, t_start_raw, t_end_raw):
+            t_end = min(t, t_end_raw)
             update_work_list(wl_map, hor_map, e, x, t)
             if len(wl_map[e].ts) > 0:
-                new_lbs = online_min_lemire(wl_map[e].lbs, wl_map[e].ts, t_start, t_end, -np.inf)
-                new_ubs = online_min_lemire(wl_map[e].ubs, wl_map[e].ts, t_start, t_end, np.inf)
+                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, t_start_raw, t_end, -np.inf)
+                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, t_start_raw, t_end, np.inf)
                 wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
-        case F(e, t_start, t_end):
-            update_work_list(wl_map, hor_map, e, x, t)
-            if len(wl_map[e].ts) > 0:
-                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, t_start, t_end, -np.inf)
-                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, t_start, t_end, np.inf)
-                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
-        case U(e_1, e_2, t_start, t_end):
-            assert 0 <= t_start <= t_end
-            assert np.isinf(t_end)
+        case U(e_1, e_2, t_start_raw, t_end_raw):
+            t_end = min(t, t_end_raw)
+            assert 0 <= t_start_raw <= t_end_raw
+            assert np.isinf(t_end_raw)
 
             update_work_list(wl_map, hor_map, e_1, x, t)
             update_work_list(wl_map, hor_map, e_2, x, t)
 
-            # Lets just do the lower bounds
+            # Let's just do the lower bounds
             rvs_left = wl_map[e_1]
             rvs_right = wl_map[e_2]
 
@@ -161,16 +166,16 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left[i], until_ubs[i + 1]))
 
             wl_map[spec] = WorkList(worst_wls.ts, until_lbs[:-1], until_ubs[:-1])
-        case O(e, t_start, t_end):
+        case O(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
             if len(wl_map[e].ts) > 0:
                 raise NotImplementedError
 
-        case H(e, t_start, t_end):
+        case H(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
             if len(wl_map[e].ts) > 0:
                 raise NotImplementedError
-        case S(e_1, e_2, t_start, t_end):
+        case S(e_1, e_2, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e_1, x, t)
             update_work_list(wl_map, hor_map, e_2, x, t)
             raise NotImplementedError
@@ -184,7 +189,7 @@ def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: float, b: float
 
 
 def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: int, b: int, fill_v: float) -> np.ndarray:
-    assert a < b
+    assert a < b, f"start (a = {a}) is not less than end (b = {b}) "
     # assert raw_ts[0] == a
     assert len(raw_xs) == len(raw_ts)
     # TODO: Support unbounded b
