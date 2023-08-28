@@ -124,19 +124,26 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             wl_map[spec] = wl_max(sub_wls)
         case G(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
-            t_end = min(t, t_end_raw)
-            if t_end <= hor[0]:
+            if t <= hor[0]:
                 print("Not yet relevant")
-            elif len(wl_map[e].ts) > 0:
-                new_lbs = online_min_lemire(wl_map[e].lbs, wl_map[e].ts, t_start_raw, t_end, -np.inf)
-                new_ubs = online_min_lemire(wl_map[e].ubs, wl_map[e].ts, t_start_raw, t_end, np.inf)
-                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
+                return
+
+            t_end = min(t, t_end_raw)
+            assert t_start_raw < t_end, f"start == {t_start_raw} is not less than end == {t_end} "
+            width = t_end - t_start_raw
+            offset_ts = wl_map[e].ts - t_start_raw
+
+            if len(wl_map[e].ts) > 0:
+                new_lbs = online_min_lemire(wl_map[e].lbs, offset_ts, width, -np.inf)
+                new_ubs = online_min_lemire(wl_map[e].ubs, offset_ts, width, np.inf)
+                wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
+
         case F(e, t_start_raw, t_end_raw):
             t_end = min(t, t_end_raw)
             update_work_list(wl_map, hor_map, e, x, t)
             if len(wl_map[e].ts) > 0:
-                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, t_start_raw, t_end, -np.inf)
-                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, t_start_raw, t_end, np.inf)
+                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, width, -np.inf)
+                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, width, np.inf)
                 wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
         case U(e_1, e_2, t_start_raw, t_end_raw):
             t_end = min(t, t_end_raw)
@@ -184,22 +191,19 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             raise ValueError("STL Expression Not Recognized")
 
 
-def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: float, b: float, fill_v: float) -> np.ndarray:
-    return -online_max_lemire(-raw_xs, raw_ts, a, b, -fill_v)
+def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width:int, fill_v: float) -> np.ndarray:
+    return -online_max_lemire(-raw_xs, raw_ts, width, -fill_v)
 
 
-def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, a: int, b: int, fill_v: float) -> np.ndarray:
-    assert a < b, f"start (a = {a}) is not less than end (b = {b}) "
+def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v: float) -> np.ndarray:
     # assert raw_ts[0] == a
     assert len(raw_xs) == len(raw_ts)
-    # TODO: Support unbounded b
+    assert width >= 1, f"width (== {width}) should be at least 1"
+    assert np.isfinite(width), f"width == f{width}, Unbounded temporal operators should be dealt with before entering min/max lemire algorithm"
 
     U = deque([0])
     window_maxs = []
 
-    # fill_v = -np.inf
-    width = b - a
-    # assert a == 0 # TODO: Support non-zero a-values safely
     # assert 0 < width < len(raw_xs)
 
     # xs = np.pad(raw_xs[a:], (0, width + 1), mode='constant', constant_values=fill_v)
