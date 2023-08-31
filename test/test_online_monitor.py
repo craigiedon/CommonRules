@@ -1,7 +1,7 @@
 # TODO: Test on simple example (no timings)
 from stl import *
 import numpy as np
-from onlineMonitor import online_run
+from onlineMonitor import online_run, online_max_lemire
 
 
 def test_notimings():
@@ -19,10 +19,15 @@ def test_or():
     spec = G(or_spec, 0, 3)
     lb_res, ub_res, final_res_map = online_run(spec, xs)
 
+    assert np.all(lb_res == [1, 1, 1, 1])
+    assert np.all(lb_res == [1, 1, 1, 1])
+
     assert np.all(final_res_map[or_spec].lbs == [1, 5, 3, 5])
     assert np.all(final_res_map[or_spec].ubs == [1, 5, 3, 5])
-    assert np.all(final_res_map[spec].lbs == [1, -np.inf, -np.inf, -np.inf])
+
+    assert np.all(final_res_map[spec].lbs == [1, 3, 3, 5])
     assert np.all(final_res_map[spec].ubs == [1, 3, 3, 5])
+
     print(final_res_map)
 
 
@@ -31,8 +36,35 @@ def test_unnestedG():
     xs = np.array([-1, 0, 2, -5])
     lb_res, ub_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-np.inf, -np.inf, -np.inf, -5]))
+    assert np.all(lb_res == np.array([-1, -1, -1, -5]))
     assert np.all(ub_res == np.array([-1, -1, -1, -5]))
+
+
+def test_online_max_lemire_one_item():
+    xs = [5.0]
+    ts = [0]
+    width = 1
+    fill_v = np.inf
+    result = online_max_lemire(xs, ts, width, fill_v)
+    assert np.all(result == np.array([5.0]))
+
+
+def test_online_max_lemire_two_item_one_width():
+    xs = [5.0, 10.0]
+    ts = [0, 1]
+    width = 1
+    fill_v = np.inf
+    result = online_max_lemire(xs, ts, width, fill_v)
+    assert np.all(result == np.array([5.0, 10.0]))
+
+
+def test_online_max_lemire_two_item_two_width():
+    xs = [5.0, 10.0]
+    ts = [0, 1]
+    width = 2
+    fill_v = np.inf
+    result = online_max_lemire(xs, ts, width, fill_v)
+    assert np.all(result == np.array([10.0, 10.0]))
 
 
 def test_unnestedF():
@@ -41,7 +73,7 @@ def test_unnestedF():
     lb_res, ub_res, res_map = online_run(spec, xs)
 
     assert np.all(lb_res == np.array([-1, 0, 2, 2]))
-    assert np.all(ub_res == np.array([np.inf, np.inf, np.inf, 2]))
+    assert np.all(ub_res == np.array([-1, 0, 2, 2]))
 
 
 def test_g_nonzero_start_inf_end():
@@ -66,7 +98,7 @@ def test_unnestedF_unbounded():
     lb_res, ub_res, res_map = online_run(spec, xs)
 
     assert np.all(lb_res == np.array([-np.inf, 0, 2, 2]))
-    assert np.all(ub_res == np.array([np.inf, np.inf, np.inf, np.inf]))
+    assert np.all(ub_res == np.array([np.inf, 0, 2, 2]))
 
 
 def test_nested_timings():
@@ -87,9 +119,13 @@ def test_nested_timings():
 def test_or_uneven_timings():
     always_spec = G(GEQ0(lambda x: x[0]), 0, np.inf)
     eventually_spec = F(GEQ0(lambda x: x[1]), 1, 3)
-    full_spec = Or(always_spec, eventually_spec)
+    full_spec = Or((always_spec, eventually_spec))
 
-    raise NotImplementedError
+    xs = [(1, 500), (-0.5, -2), (-10, -1), (-100, 5)]
+
+    lb_res, ub_res, res_map = online_run(full_spec, xs)
+    assert np.all(lb_res == np.array([1, -0.5, -1, 5]))
+    assert np.all(ub_res == np.array([1, -0.5, -1, 5]))
 
 
 def test_and_uneven_timings():

@@ -99,14 +99,13 @@ def wl_max(wls: List[WorkList]) -> WorkList:
 
 def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]],
                      spec: STLExp, x: Any, t: int) -> None:
-    hor = hor_map[spec]
     match spec:
         case LEQ0(f):
-            if hor[0] <= t <= hor[1]:
+            if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = -f(x)
                 wl_map[spec] = add_wl_point(wl_map[spec], t, r_val, r_val)
         case GEQ0(f):
-            if hor[0] <= t <= hor[1]:
+            if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = f(x)
                 wl_map[spec] = add_wl_point(wl_map[spec], t, r_val, r_val)
         case Neg(e):
@@ -124,13 +123,13 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             wl_map[spec] = wl_max(sub_wls)
         case G(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
-            if t <= hor[0]:
+            if t < hor_map[e][0]:
                 print("Not yet relevant")
                 return
 
             t_end = min(t, t_end_raw)
-            assert t_start_raw < t_end, f"start == {t_start_raw} is not less than end == {t_end} "
-            width = t_end - t_start_raw
+            assert t_start_raw <= t_end, f"start == {t_start_raw} is not less than end == {t_end} "
+            width = t_end + 1 - t_start_raw
             offset_ts = wl_map[e].ts - t_start_raw
 
             if len(wl_map[e].ts) > 0:
@@ -139,19 +138,32 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
 
         case F(e, t_start_raw, t_end_raw):
-            t_end = min(t, t_end_raw)
             update_work_list(wl_map, hor_map, e, x, t)
-            if len(wl_map[e].ts) > 0:
-                new_lbs = online_max_lemire(wl_map[e].lbs, wl_map[e].ts, width, -np.inf)
-                new_ubs = online_max_lemire(wl_map[e].ubs, wl_map[e].ts, width, np.inf)
-                wl_map[spec] = WorkList(wl_map[e].ts, new_lbs, new_ubs)
-        case U(e_1, e_2, t_start_raw, t_end_raw):
+            if t < hor_map[e][0]:
+                print("Not yet relevant")
+                return
             t_end = min(t, t_end_raw)
+
+            assert t_start_raw <= t_end, f"start == {t_start_raw} is not less than end == {t_end} "
+            width = t_end + 1 - t_start_raw
+            offset_ts = wl_map[e].ts - t_start_raw
+
+            if len(wl_map[e].ts) > 0:
+                new_lbs = online_max_lemire(wl_map[e].lbs, offset_ts, width, -np.inf)
+                new_ubs = online_max_lemire(wl_map[e].ubs, offset_ts, width, np.inf)
+                wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
+        case U(e_1, e_2, t_start_raw, t_end_raw):
             assert 0 <= t_start_raw <= t_end_raw
-            assert np.isinf(t_end_raw)
+            # assert np.isinf(t_end_raw)
 
             update_work_list(wl_map, hor_map, e_1, x, t)
             update_work_list(wl_map, hor_map, e_2, x, t)
+
+            if t <= hor_map[e_1][0]:
+                print("Not yet relevant")
+                return
+
+            t_end = min(t, t_end_raw)
 
             # Let's just do the lower bounds
             rvs_left = wl_map[e_1]
@@ -201,6 +213,9 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v
     assert width >= 1, f"width (== {width}) should be at least 1"
     assert np.isfinite(width), f"width == f{width}, Unbounded temporal operators should be dealt with before entering min/max lemire algorithm"
 
+    if len(raw_xs) == 4:
+        print("Be here!")
+
     U = deque([0])
     window_maxs = []
 
@@ -208,27 +223,58 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v
 
     # xs = np.pad(raw_xs[a:], (0, width + 1), mode='constant', constant_values=fill_v)
     # ts = np.concatenate((raw_ts, [raw_ts[-1] + time_pad for time_pad in range(1, width + 2)]))
-    xs = np.pad(raw_xs, (0, width + 1), mode='constant', constant_values=fill_v)
-    ts = np.concatenate((raw_ts, [raw_ts[-1] + time_pad for time_pad in range(1, width + 2)]))
+    # xs = np.pad(raw_xs, (0, width + 1), mode='constant', constant_values=fill_v)
+    ts = np.concatenate((raw_ts, [raw_ts[-1] + time_pad for time_pad in range(1, width + 1)]))
+    xs = raw_xs
+    # ts = raw_ts
 
-    for i in range(1, len(xs)):
+    # Examples
+    # raw_xs = [5.0], width = 1.0
+    # window_maxs = [5.0]
+
+    # raw_xs = [5.0, 2.0], width = 1.0
+    # window_maxs = [5.0, 2.0]
+
+    # raw_xs = [5.0, 10.0], width = 2.0
+    # window_maxs = [10.0, 10.0]
+
+    for i in range(1, len(xs) + width):
         t = ts[i]
         # We've seen at least the full width time-wise, so we can start appending max values now
-        if t - ts[0] > width:
+        if i >= width:
             window_maxs.append(xs[U[-1]])
 
-        # While the current x-value is bigger than the most recent maxes, keep popping
-        if xs[i] > xs[i - 1]:
-            U.popleft()
-            while len(U) > 0 and xs[i] > xs[U[0]]:
+        if i < len(xs):
+            # While the current x-value is bigger than the most recent maxes, keep popping
+            if xs[i] > xs[i - 1]:
                 U.popleft()
+                while len(U) > 0 and xs[i] > xs[U[0]]:
+                    U.popleft()
 
-        # Add current value to the front of the queue
-        U.appendleft(i)
+            # Add current value to the front of the queue
+            U.appendleft(i)
 
-        # Slide window if the earliest value has just gone outside time frame
-        if t > width + ts[U[-1]]:
+        if t >= width + ts[U[-1]]:
             U.pop()
+
+    # for i in range(1, len(xs)):
+    #     t = ts[i]
+    #     # We've seen at least the full width time-wise, so we can start appending max values now
+    #     if t - ts[0] > width:
+    #         window_maxs.append(xs[U[-1]])
+    #
+    #     # While the current x-value is bigger than the most recent maxes, keep popping
+    #     if xs[i] > xs[i - 1]:
+    #         U.popleft()
+    #         while len(U) > 0 and xs[i] > xs[U[0]]:
+    #             U.popleft()
+    #
+    #     # Add current value to the front of the queue
+    #     U.appendleft(i)
+    #
+    #     # Slide window if the earliest value has just gone outside time frame
+    #     if t > width + ts[U[-1]]:
+    #         U.pop()
 
     assert len(window_maxs) == len(raw_xs)
     return np.array(window_maxs)
