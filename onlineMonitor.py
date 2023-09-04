@@ -114,13 +114,15 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
         case And(exps):
             for e in exps:
                 update_work_list(wl_map, hor_map, e, x, t)
-            sub_wls = [wl_map[e] for e in exps]
-            wl_map[spec] = wl_min(sub_wls)
+            sub_wls = [wl_map[e] for e in exps if len(wl_map[e].ts) > 0]
+            if len(sub_wls) > 0:
+                wl_map[spec] = wl_min(sub_wls)
         case Or(exps):
             for e in exps:
                 update_work_list(wl_map, hor_map, e, x, t)
-            sub_wls = [wl_map[e] for e in exps]
-            wl_map[spec] = wl_max(sub_wls)
+            sub_wls = [wl_map[e] for e in exps if len(wl_map[e].ts) > 0]
+            if len(sub_wls) > 0:
+                wl_map[spec] = wl_max(sub_wls)
         case G(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
             if t < hor_map[e][0]:
@@ -159,7 +161,7 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             update_work_list(wl_map, hor_map, e_1, x, t)
             update_work_list(wl_map, hor_map, e_2, x, t)
 
-            if t <= hor_map[e_1][0]:
+            if t < hor_map[e_1][0]:
                 print("Not yet relevant")
                 return
 
@@ -170,33 +172,39 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             rvs_right = wl_map[e_2]
 
             # TODO: Is this "pointwise" function actually correct?
-            worst_wls = wl_pointwise_op([rvs_left, rvs_right], min)
+            worst_wls = wl_pointwise_op([rvs_left, rvs_right], np.min)
 
             assert len(rvs_left.ts) == len(worst_wls.ts)
 
             until_lbs = np.zeros(len(worst_wls.ts) + 1)
             until_lbs[-1] = -np.inf
-            for i in reversed(range(0, len(worst_wls.ts))):
-                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left[i], until_lbs[i + 1]))
 
             until_ubs = np.zeros(len(worst_wls.ts) + 1)
             until_ubs[-1] = np.inf
+
             for i in reversed(range(0, len(worst_wls.ts))):
-                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left[i], until_ubs[i + 1]))
+                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left.lbs[i], until_lbs[i + 1]))
+                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left.ubs[i], until_ubs[i + 1]))
 
             wl_map[spec] = WorkList(worst_wls.ts, until_lbs[:-1], until_ubs[:-1])
         case O(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
+            if t < hor_map[e][0] or t > hor_map[e][1]:
+                print("Not yet relevant")
+                return
+
             if len(wl_map[e].ts) > 0:
-                raise NotImplementedError
+                width = t_end_raw + 1 - t_start_raw
+                offset_ts = wl_map[e].ts + t_start_raw
+
+                if len(wl_map[e].ts) > 0:
+                    new_lbs = online_max_lemire(wl_map[e].lbs[::-1], offset_ts, width, -np.inf)[::-1]
+                    new_ubs = online_max_lemire(wl_map[e].ubs[::-1], offset_ts, width, np.inf)[::-1]
+                    wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
 
         case H(e, t_start_raw, t_end_raw):
-            update_work_list(wl_map, hor_map, e, x, t)
-            if len(wl_map[e].ts) > 0:
-                raise NotImplementedError
+            raise NotImplementedError
         case S(e_1, e_2, t_start_raw, t_end_raw):
-            update_work_list(wl_map, hor_map, e_1, x, t)
-            update_work_list(wl_map, hor_map, e_2, x, t)
             raise NotImplementedError
 
         case _:
@@ -213,8 +221,8 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v
     assert width >= 1, f"width (== {width}) should be at least 1"
     assert np.isfinite(width), f"width == f{width}, Unbounded temporal operators should be dealt with before entering min/max lemire algorithm"
 
-    if len(raw_xs) == 4:
-        print("Be here!")
+    # if len(raw_xs) == 4:
+    #     print("Be here!")
 
     U = deque([0])
     window_maxs = []
@@ -288,12 +296,11 @@ def online_run(spec, xs) -> Tuple[np.ndarray, np.ndarray, Dict[STLExp, WorkList]
     ub_history = []
     for t, s in enumerate(xs):
         update_work_list(wl_map, h_map, spec, s, t)
+        # Assumes you are looking to monitor at t=0
         if len(wl_map[spec].ts) > 0:
-            # print(f'{t}: lb: {wl_map[spec].lbs[0]} ub:{wl_map[spec].ubs[0]}')
             lb_history.append(wl_map[spec].lbs[0])
             ub_history.append(wl_map[spec].ubs[0])
         else:
-            # print(f'{t}: lb: {-np.inf} ub:{np.inf}')
             lb_history.append(-np.inf)
             ub_history.append(np.inf)
     print(wl_map)
