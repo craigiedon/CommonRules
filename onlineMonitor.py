@@ -180,7 +180,7 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             until_lbs[-1] = -np.inf
 
             until_ubs = np.zeros(len(worst_wls.ts) + 1)
-            until_ubs[-1] = np.inf
+            until_ubs[-1] = -np.inf
 
             for i in reversed(range(0, len(worst_wls.ts))):
                 until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left.lbs[i], until_lbs[i + 1]))

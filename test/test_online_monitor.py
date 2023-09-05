@@ -190,12 +190,20 @@ def test_until_left_violationEventually():
     assert np.all(ub_res == np.array([-5, -5, -5, -1]))
 
 
+def test_until_offset_oob():
+    spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 1, np.inf)
+    xs = np.array([[5, -5], [3, -6], [2, 10], [-100, -8]])
+    lb_res, ub_res, res_map = online_run(spec, xs)
+
+    assert np.all(lb_res == np.array([-np.inf, -6, 2, 2]))
+
+
 def test_until_right_violation():
-    pass
+    spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, 1)
+    xs = np.array([[5, -5], [3, -6], [2, 10], [-100, -8]])
+    lb_res, ub_res, res_map = online_run(spec, xs)
 
-
-def test_since():
-    return
+    assert np.all(lb_res == np.array([-5, -5, -5, -5]))
 
 
 def test_offline_identical():
