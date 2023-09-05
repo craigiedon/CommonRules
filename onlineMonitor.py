@@ -36,20 +36,19 @@ def gen_hor_map(spec: STLExp) -> Dict[STLExp, Tuple[int, int]]:
 @dataclass(frozen=True)
 class WorkList:
     ts: np.ndarray  # Time Stamps
-    lbs: np.ndarray  # Lower Bounds
-    ubs: np.ndarray  # Upper Bounds
+    vs: np.ndarray  # Values
 
 
 def init_wmap(spec: STLExp) -> Dict[STLExp, WorkList]:
-    return {e: WorkList(np.array([]), np.array([]), np.array([])) for e in stl_tree(spec)}
+    return {e: WorkList(np.array([]), np.array([])) for e in stl_tree(spec)}
 
 
-def add_wl_point(wl: WorkList, t: int, lb: float, ub: float) -> WorkList:
-    return WorkList(np.append(wl.ts, t), np.append(wl.lbs, lb), np.append(wl.ubs, ub))
+def add_wl_point(wl: WorkList, t: int, x: float) -> WorkList:
+    return WorkList(np.append(wl.ts, t), np.append(wl.vs, x))
 
 
 def wl_neg(wl: WorkList) -> WorkList:
-    return WorkList(wl.ts, -wl.lbs, -wl.ubs)
+    return WorkList(wl.ts, -wl.vs)
 
 
 def fill_p_const_signal(desired_ts: List[int], sig_ts: np.ndarray, sig_vs: np.ndarray) -> np.ndarray:
@@ -76,17 +75,14 @@ def fill_p_const_signal(desired_ts: List[int], sig_ts: np.ndarray, sig_vs: np.nd
 
 
 def wl_pointwise_op(wls: List[WorkList], op: Callable) -> WorkList:
-    wl_tuples: Dict[int, Tuple[int, int]] = {}
 
     combined_ts: List[int] = sorted(set([t for wl in wls for t in wl.ts]))
 
-    filled_lbs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.lbs) for wl in wls])
-    filled_ubs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.ubs) for wl in wls])
+    filled_vs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.vs) for wl in wls])
 
-    merged_lbs = op(filled_lbs, axis=0)
-    merged_ubs = op(filled_ubs, axis=0)
+    merged_vs = op(filled_vs, axis=0)
 
-    return WorkList(np.array(combined_ts), merged_lbs, merged_ubs)
+    return WorkList(np.array(combined_ts), merged_vs)
 
 
 def wl_min(wls: List[WorkList]) -> WorkList:
@@ -103,11 +99,11 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
         case LEQ0(f):
             if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = -f(x)
-                wl_map[spec] = add_wl_point(wl_map[spec], t, r_val, r_val)
+                wl_map[spec] = add_wl_point(wl_map[spec], t, r_val)
         case GEQ0(f):
             if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = f(x)
-                wl_map[spec] = add_wl_point(wl_map[spec], t, r_val, r_val)
+                wl_map[spec] = add_wl_point(wl_map[spec], t, r_val)
         case Neg(e):
             update_work_list(wl_map, hor_map, e, x, t)
             wl_map[spec] = wl_neg(wl_map[e])
@@ -135,9 +131,8 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             offset_ts = wl_map[e].ts - t_start_raw
 
             if len(wl_map[e].ts) > 0:
-                new_lbs = online_min_lemire(wl_map[e].lbs, offset_ts, width, -np.inf)
-                new_ubs = online_min_lemire(wl_map[e].ubs, offset_ts, width, np.inf)
-                wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
+                new_vs = online_min_lemire(wl_map[e].vs, offset_ts, width, -np.inf)
+                wl_map[spec] = WorkList(offset_ts, new_vs)
 
         case F(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
@@ -151,12 +146,10 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             offset_ts = wl_map[e].ts - t_start_raw
 
             if len(wl_map[e].ts) > 0:
-                new_lbs = online_max_lemire(wl_map[e].lbs, offset_ts, width, -np.inf)
-                new_ubs = online_max_lemire(wl_map[e].ubs, offset_ts, width, np.inf)
-                wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
+                new_vs = online_max_lemire(wl_map[e].vs, offset_ts, width, -np.inf)
+                wl_map[spec] = WorkList(offset_ts, new_vs)
         case U(e_1, e_2, t_start_raw, t_end_raw):
             assert 0 <= t_start_raw <= t_end_raw
-            # assert np.isinf(t_end_raw)
 
             update_work_list(wl_map, hor_map, e_1, x, t)
             update_work_list(wl_map, hor_map, e_2, x, t)
@@ -176,17 +169,13 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
 
             assert len(rvs_left.ts) == len(worst_wls.ts)
 
-            until_lbs = np.zeros(len(worst_wls.ts) + 1)
-            until_lbs[-1] = -np.inf
-
-            until_ubs = np.zeros(len(worst_wls.ts) + 1)
-            until_ubs[-1] = -np.inf
+            until_vs = np.zeros(len(worst_wls.ts) + 1)
+            until_vs[-1] = -np.inf
 
             for i in reversed(range(0, len(worst_wls.ts))):
-                until_lbs[i] = max(worst_wls.lbs[i], min(rvs_left.lbs[i], until_lbs[i + 1]))
-                until_ubs[i] = max(worst_wls.ubs[i], min(rvs_left.ubs[i], until_ubs[i + 1]))
+                until_vs[i] = max(worst_wls.vs[i], min(rvs_left.vs[i], until_vs[i + 1]))
 
-            wl_map[spec] = WorkList(worst_wls.ts, until_lbs[:-1], until_ubs[:-1])
+            wl_map[spec] = WorkList(worst_wls.ts, until_vs[:-1])
         case O(e, t_start_raw, t_end_raw):
             update_work_list(wl_map, hor_map, e, x, t)
             if t < hor_map[e][0] or t > hor_map[e][1]:
@@ -198,9 +187,8 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 offset_ts = wl_map[e].ts + t_start_raw
 
                 if len(wl_map[e].ts) > 0:
-                    new_lbs = online_max_lemire(wl_map[e].lbs[::-1], offset_ts, width, -np.inf)[::-1]
-                    new_ubs = online_max_lemire(wl_map[e].ubs[::-1], offset_ts, width, np.inf)[::-1]
-                    wl_map[spec] = WorkList(offset_ts, new_lbs, new_ubs)
+                    new_vs = online_max_lemire(wl_map[e].vs[::-1], offset_ts, width, -np.inf)[::-1]
+                    wl_map[spec] = WorkList(offset_ts, new_vs)
 
         case H(e, t_start_raw, t_end_raw):
             raise NotImplementedError
@@ -288,26 +276,22 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v
     return np.array(window_maxs)
 
 
-def online_run(spec, xs) -> Tuple[np.ndarray, np.ndarray, Dict[STLExp, WorkList]]:
+def online_run(spec, xs) -> Tuple[np.ndarray, Dict[STLExp, WorkList]]:
     h_map = gen_hor_map(spec)
     wl_map = init_wmap(spec)
 
-    lb_history = []
-    ub_history = []
+    vs_history = []
     for t, s in enumerate(xs):
         update_work_list(wl_map, h_map, spec, s, t)
         # Assumes you are looking to monitor at t=0
         if len(wl_map[spec].ts) > 0:
-            lb_history.append(wl_map[spec].lbs[0])
-            ub_history.append(wl_map[spec].ubs[0])
+            vs_history.append(wl_map[spec].vs[0])
         else:
-            lb_history.append(-np.inf)
-            ub_history.append(np.inf)
+            vs_history.append(-np.inf)
     print(wl_map)
 
-    lb_history = np.array(lb_history)
-    ub_history = np.array(ub_history)
-    return lb_history, ub_history, wl_map
+    vs_history = np.array(vs_history)
+    return vs_history, wl_map
 
 
 def run():

@@ -7,26 +7,22 @@ from onlineMonitor import online_run, online_max_lemire
 def test_notimings():
     spec = GEQ0(lambda x: x)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-1, -1, -1, -1]))
-    assert np.all(ub_res == np.array([-1, -1, -1, -1]))
+    assert np.all(v_res == np.array([-1, -1, -1, -1]))
 
 
 def test_or():
     xs = [(1, -1), (-2, 5), (3, -4), (-1, 5)]
     or_spec = Or((GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1])))
     spec = G(or_spec, 0, 3)
-    lb_res, ub_res, final_res_map = online_run(spec, xs)
+    v_res, final_res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == [1, 1, 1, 1])
-    assert np.all(lb_res == [1, 1, 1, 1])
+    assert np.all(v_res == [1, 1, 1, 1])
+    assert np.all(v_res == [1, 1, 1, 1])
 
-    assert np.all(final_res_map[or_spec].lbs == [1, 5, 3, 5])
-    assert np.all(final_res_map[or_spec].ubs == [1, 5, 3, 5])
-
-    assert np.all(final_res_map[spec].lbs == [1, 3, 3, 5])
-    assert np.all(final_res_map[spec].ubs == [1, 3, 3, 5])
+    assert np.all(final_res_map[or_spec].vs == [1, 5, 3, 5])
+    assert np.all(final_res_map[spec].vs == [1, 3, 3, 5])
 
     print(final_res_map)
 
@@ -34,10 +30,9 @@ def test_or():
 def test_unnestedG():
     spec = G(GEQ0(lambda x: x), 0, 3)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-1, -1, -1, -5]))
-    assert np.all(ub_res == np.array([-1, -1, -1, -5]))
+    assert np.all(v_res == np.array([-1, -1, -1, -5]))
 
 
 def test_online_max_lemire_one_item():
@@ -70,19 +65,17 @@ def test_online_max_lemire_two_item_two_width():
 def test_unnestedF():
     spec = F(GEQ0(lambda x: x), 0, 3)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-1, 0, 2, 2]))
-    assert np.all(ub_res == np.array([-1, 0, 2, 2]))
+    assert np.all(v_res == np.array([-1, 0, 2, 2]))
 
 
 def test_g_nonzero_start_inf_end():
     spec = G(GEQ0(lambda x: x), 2, np.inf)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == [-np.inf, -np.inf, 2, -5])
-    assert np.all(ub_res == [np.inf, np.inf, 2, -5])
+    assert np.all(v_res == [-np.inf, -np.inf, 2, -5])
 
 
 # TODO: Test 0, inf outer, finite nested offest
@@ -95,10 +88,9 @@ def test_g_nonzero_start_inf_end():
 def test_unnestedF_unbounded():
     spec = F(GEQ0(lambda x: x), 1, np.inf)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-np.inf, 0, 2, 2]))
-    assert np.all(ub_res == np.array([np.inf, 0, 2, 2]))
+    assert np.all(v_res == np.array([-np.inf, 0, 2, 2]))
 
 
 def test_nested_timings():
@@ -106,7 +98,7 @@ def test_nested_timings():
     eventually_spec = F(comp_spec, 1, 2)
     spec = G(eventually_spec, 0, 3)
     xs = [-5, 1, 2, 3, 10, 20]
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
     assert len(res_map[comp_spec].ts) == 5
     assert len(res_map[eventually_spec].ts) == 5
@@ -123,9 +115,8 @@ def test_or_uneven_timings():
 
     xs = [(1, 500), (-0.5, -2), (-10, -1), (-100, 5)]
 
-    lb_res, ub_res, res_map = online_run(full_spec, xs)
-    assert np.all(lb_res == np.array([1, -0.5, -1, 5]))
-    assert np.all(ub_res == np.array([1, -0.5, -1, 5]))
+    v_res, res_map = online_run(full_spec, xs)
+    assert np.all(v_res == np.array([1, -0.5, -1, 5]))
 
 
 def test_and_uneven_timings():
@@ -135,75 +126,68 @@ def test_and_uneven_timings():
 
     xs = [(1, 500), (-0.5, -2), (-10, -1), (-100, 5)]
 
-    lb_res, ub_res, res_map = online_run(full_spec, xs)
-    assert np.all(lb_res == np.array([1, -2, -10, -100]))
-    assert np.all(ub_res == np.array([1, -2, -10, -100]))
+    v_res, res_map = online_run(full_spec, xs)
+    assert np.all(v_res == np.array([1, -2, -10, -100]))
 
 
 def test_once_no_nesting_no_offset():
     spec = O(GEQ0(lambda x: x), 0, 3)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
-    assert np.all(lb_res == np.array([-1, -1, -1, -1]))
-    assert np.all(ub_res == np.array([-1, -1, -1, -1]))
+    v_res, res_map = online_run(spec, xs)
+    assert np.all(v_res == np.array([-1, -1, -1, -1]))
 
 
 def test_once_no_nesting_offset():
     spec = O(GEQ0(lambda x: x), 1, 3)
     xs = np.array([-1, 0, 2, -5])
-    lb_res, ub_res, res_map = online_run(spec, xs)
-    assert np.all(lb_res == np.array([-np.inf, -np.inf, -np.inf, -np.inf]))
-    assert np.all(ub_res == np.array([np.inf, np.inf, np.inf, np.inf]))
+    v_res, res_map = online_run(spec, xs)
+    assert np.all(v_res == np.array([-np.inf, -np.inf, -np.inf, -np.inf]))
 
 
 def test_once_nesting_no_offset():
     spec = G(O(GEQ0(lambda x: x), 0, 3), 0, np.inf)
     xs = np.array([5, 0, 0, 0, -3])
-    lb_res, ub_res, res_map = online_run(spec, xs)
-    assert np.all(lb_res == np.array([5, 5, 5, 5, 0]))
-    assert np.all(ub_res == np.array([5, 5, 5, 5, 0]))
+    v_res, res_map = online_run(spec, xs)
+    assert np.all(v_res == np.array([5, 5, 5, 5, 0]))
 
 
 def test_once_nesting_offset():
     spec = G(O(GEQ0(lambda x: x), 1, 3), 0, np.inf)
     xs = np.array([5, 0, 0, 0, -3])
-    lb_res, ub_res, res_map = online_run(spec, xs)
-    assert np.all(lb_res == np.array([5, 5, 5, 0, 0]))
-    assert np.all(ub_res == np.array([5, 5, 5, 0, 0]))
+    v_res, res_map = online_run(spec, xs)
+    assert np.all(v_res == np.array([5, 5, 5, 0, 0]))
 
 
 def test_until_passesEventually():
     spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, 3)
     xs = np.array([[5, -5], [3, -6], [2, 10], [-100, -8]])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-5, -5, 2, 2]))
-    assert np.all(ub_res == np.array([-5, -5, 2, 2]))
+    assert np.all(v_res == np.array([-5, -5, 2, 2]))
 
 
 def test_until_left_violationEventually():
     spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, 3)
     xs = np.array([[5, -5], [3, -6], [-1, -10], [2, 10]])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-5, -5, -5, -1]))
-    assert np.all(ub_res == np.array([-5, -5, -5, -1]))
+    assert np.all(v_res == np.array([-5, -5, -5, -1]))
 
 
 def test_until_offset_oob():
     spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 1, np.inf)
     xs = np.array([[5, -5], [3, -6], [2, 10], [-100, -8]])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-np.inf, -6, 2, 2]))
+    assert np.all(v_res == np.array([-np.inf, -6, 2, 2]))
 
 
 def test_until_right_violation():
     spec = U(GEQ0(lambda x: x[0]), GEQ0(lambda x: x[1]), 0, 1)
     xs = np.array([[5, -5], [3, -6], [2, 10], [-100, -8]])
-    lb_res, ub_res, res_map = online_run(spec, xs)
+    v_res, res_map = online_run(spec, xs)
 
-    assert np.all(lb_res == np.array([-5, -5, -5, -5]))
+    assert np.all(v_res == np.array([-5, -5, -5, -5]))
 
 
 def test_offline_identical():
