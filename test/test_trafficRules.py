@@ -6,7 +6,7 @@ from commonroad.scenario.obstacle import StaticObstacle, ObstacleType, DynamicOb
 from commonroad.scenario.state import KSState, InitialState, CustomState
 from pytest import approx
 
-from stl import stl_rob
+from stl import stl_rob, And, G, Neg, O, H
 from trafficRules import front, rear, left, right, in_lane, in_same_lane, in_front_of, turning_left, single_lane, \
     cut_in, keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking, traffic_flow_rule, interstate_stopping_rule, \
     left_of, in_congestion, slightly_higher_speed, faster_than_left_rule, consider_entering_vehicles_rule
@@ -450,21 +450,24 @@ def test_safe_dist_rule_recent_cut_in():
     lane_centres = [1.75, 5.25]
     lane_widths = 3.5
     dt = 0.1
+    t_cut_in = int(np.round(3.0 / dt))
 
     e = safe_dist_rule(behind_car, cutter_car, lane_centres, lane_widths, acc_min=-10.5 * dt, reaction_time=0.3,
-                       t_cut_in=int(np.round(3.0 / dt)))
+                       t_cut_in=t_cut_in)
 
     bc_start_x = 0.0
     vels = 25.0 * dt
 
-    xs = []
-    for i in range(3):
-        bc_pos = np.array([bc_start_x + vels * i, lane_centres[1]])
-        cc_pos = bc_pos + np.array([4.5, -1.75])
-        xs.append(
-            {0: KSState(0, position=bc_pos, velocity=vels, orientation=0.0),
-             1: KSState(0, position=cc_pos, velocity=vels, orientation=np.pi / 4.0)},
-        )
+    bc_ps = np.array([[bc_start_x + vels * i, lane_centres[1]] for i in range(3)])
+    cc_ps = bc_ps + np.array([[4.5, -5.75],
+                              [4.5, -1.75],
+                              [4.5, 0]])
+
+    xs = [
+        {0: KSState(i, position=bc_pos, velocity=vels, orientation=0.0),
+         1: KSState(i, position=cc_pos, velocity=vels, orientation=np.pi / 4.0)}
+        for i, (bc_pos, cc_pos) in enumerate(zip(bc_ps, cc_ps))
+    ]
 
     result = stl_rob(e, xs, 0)
 

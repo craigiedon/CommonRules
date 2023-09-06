@@ -1,7 +1,21 @@
 # TODO: Test on simple example (no timings)
+from commonroad.geometry.shape import Rectangle
+from commonroad.scenario.obstacle import Obstacle, ObstacleType, DynamicObstacle
+from commonroad.scenario.state import KSState, InitialState, CustomState
+
 from stl import *
 import numpy as np
 from onlineMonitor import online_run, online_max_lemire
+
+from trafficRules import keeps_safe_distance_prec, safe_dist_rule, unnecessary_braking, interstate_stopping_rule, \
+    faster_than_left_rule, consider_entering_vehicles_rule
+
+
+def gen_cars(num_cars: int) -> List[Obstacle]:
+    cars = [DynamicObstacle(i, ObstacleType.CAR, Rectangle(length=4.0, width=1.5),
+                            InitialState(position=np.array([0.0, 0.0]), velocity=0.0, orientation=0.0))
+            for i in range(num_cars)]
+    return cars
 
 
 def test_notimings():
@@ -190,8 +204,162 @@ def test_until_right_violation():
     assert np.all(v_res == np.array([-5, -5, -5, -5]))
 
 
-def test_offline_identical():
-    return
+def test_on_off_safe_dist_fail():
+    behind_car, cutter_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
 
-# TODO: Test that the values for above are identical to the batch counterpart at each stage
-# TODO: Test for all 5 of the traffic rules in the traffic STL (+ identical to offline version?)
+    e = keeps_safe_distance_prec(behind_car, cutter_car, acc_min=-10.5 * dt, reaction_time=0.3)
+
+    bc_start_x = 0.0
+    vels = 25.0 * dt
+
+    xs = []
+    for i in range(3):
+        bc_pos = np.array([bc_start_x + vels * i, lane_centres[0]])
+        cc_pos = bc_pos + np.array([2.0, 0.0])
+        xs.append(
+            {0: KSState(0, position=bc_pos, velocity=vels, orientation=0.0),
+             1: KSState(0, position=cc_pos, velocity=vels, orientation=0.0)},
+        )
+
+    online_res_hist, online_map = online_run(e, xs)
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+
+    assert offline_res_hist[-1] < 0
+    assert np.all(offline_res_hist == online_res_hist)
+
+
+def test_on_off_safe_dist_pass():
+    behind_car, cutter_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+    t_cut_in = int(np.round(3.0 / dt))
+
+    e = safe_dist_rule(behind_car, cutter_car, lane_centres, lane_widths, acc_min=-10.5 * dt, reaction_time=0.3,
+                       t_cut_in=t_cut_in)
+
+    bc_start_x = 0.0
+    vels = 25.0 * dt
+
+    bc_ps = np.array([[bc_start_x + vels * i, lane_centres[1]] for i in range(3)])
+    cc_ps = bc_ps + np.array([[4.5, -5.75],
+                              [4.5, -1.75],
+                              [4.5, 0]])
+
+    xs = [
+        {0: KSState(i, position=bc_pos, velocity=vels, orientation=0.0),
+         1: KSState(i, position=cc_pos, velocity=vels, orientation=np.pi / 4.0)}
+        for i, (bc_pos, cc_pos) in enumerate(zip(bc_ps, cc_ps))
+    ]
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+    online_res, online_map = online_run(e, xs)
+
+    assert offline_res_hist[-1] > 0
+    assert np.all(offline_res_hist == online_res)
+
+
+def test_on_off_no_unnecessary_braking():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    a_abrupt = -2 * dt
+    acc_min = -10.5 * dt
+    reaction_time = 0.3
+
+    e = unnecessary_braking(ego_car, [other_car], lane_centres, lane_widths, a_abrupt, acc_min, reaction_time)
+
+    xs = [
+        {
+            0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, acceleration=5.0, orientation=0.0,
+                           time_step=0),
+            1: CustomState(position=[100.0, lane_centres[1]], velocity=1.0, acceleration=0.0, orientation=0.0,
+                           time_step=0),
+        }
+    ]
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+    online_res, online_map = online_run(e, xs)
+
+    assert np.all(offline_res_hist == online_res)
+
+
+def test_on_off_interstate_stopping():
+    ego_car, other_car = gen_cars(2)
+    lane_centres = [1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+    v_err = 0.01 * dt
+
+    e = interstate_stopping_rule(ego_car, [other_car], lane_centres, lane_widths, v_err)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[15.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}]
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+    online_res, online_map = online_run(e, xs)
+
+    assert np.all(offline_res_hist == online_res)
+
+
+def test_on_off_faster_than_left():
+    ego_car, *other_cars = gen_cars(3)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+    dt = 0.1
+
+    congestion_vel = 2.78 * dt
+    slow_traff_vel = 8.33 * dt
+    queue_vel = 16.67 * dt
+
+    diff_thresh = 1.0 * dt
+
+    congestion_size = queue_size = traffic_size = 1
+
+    e = faster_than_left_rule(ego_car, other_cars, lane_centres[1:],
+                              lane_centres[:1], lane_widths, congestion_vel, congestion_size,
+                              queue_vel, queue_size,
+                              slow_traff_vel,
+                              traffic_size,
+                              diff_thresh)
+
+    xs = [{
+        0: CustomState(position=[0.0, lane_centres[0]], velocity=1.0, orientation=0.0, time_step=0),
+        1: CustomState(position=[0.0, lane_centres[1]], velocity=1.5, orientation=0.0, time_step=0),
+        2: CustomState(position=[10.0, lane_centres[1]], velocity=1.5, orientation=0.0, time_step=0)}]
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+    online_res, online_map = online_run(e, xs)
+
+    assert np.all(offline_res_hist == online_res)
+
+
+def test_on_off_consider_entering():
+    ego_car, other_car = gen_cars(2)
+
+    lane_centres = [-1.75, 1.75, 5.25]
+    lane_widths = 3.5
+
+    e = consider_entering_vehicles_rule(ego_car, [other_car], lane_centres[1:], lane_centres[:1], lane_widths)
+
+    xs = [
+        {0: CustomState(position=[10.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)},
+
+        {0: CustomState(position=[10.0, lane_centres[2]], velocity=10.0, orientation=0.0, time_step=0),
+         1: CustomState(position=[0.0, lane_centres[0]], velocity=10.0, orientation=0.0, time_step=0)}
+    ]
+
+    offline_res_hist = np.array([stl_rob(e, xs[:i + 1], 0) for i in range(len(xs))])
+    online_res, online_map = online_run(e, xs)
+
+    assert np.all(offline_res_hist == online_res)
+

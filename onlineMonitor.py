@@ -187,7 +187,17 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                     wl_map[spec] = WorkList(offset_ts, new_vs)
 
         case H(e, t_start_raw, t_end_raw):
-            raise NotImplementedError
+            update_work_list(wl_map, hor_map, e, x, t)
+            if t < hor_map[e][0] or t > hor_map[e][1]:
+                print("Not yet relevant")
+                return
+            if len(wl_map[e].ts) > 0:
+                width = t_end_raw + 1 - t_start_raw
+                offset_ts = wl_map[e].ts + t_start_raw
+
+                if len(wl_map[e].ts) > 0:
+                    new_vs = online_min_lemire(wl_map[e].vs[::-1], offset_ts, width, -np.inf)[::-1]
+                    wl_map[spec] = WorkList(offset_ts, new_vs)
         case S(e_1, e_2, t_start_raw, t_end_raw):
             raise NotImplementedError
 

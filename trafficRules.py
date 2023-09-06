@@ -13,7 +13,7 @@ from utils import rot_mat
 
 
 def in_same_lane(c1: Obstacle, c2: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
-    return Or([And([in_lane(c1, l, lane_widths), in_lane(c2, l, lane_widths)]) for l in lane_centres])
+    return Or(tuple(And((in_lane(c1, l, lane_widths), in_lane(c2, l, lane_widths))) for l in lane_centres))
 
 
 def in_lane(car: Obstacle, lane_centre: float, lane_width: float) -> STLExp:
@@ -88,27 +88,27 @@ def left_of(car_a: Obstacle, car_b: Obstacle) -> STLExp:
     rear_b = x(partial(rear, car_b))
 
     # Rear of car_a is in between the front & rear of car_b
-    a_rear_between = And([
+    a_rear_between = And((
         LEQ(rear_b, rear_a),
         LEQ(rear_a, front_b)
-    ])
+    ))
 
     # Front of car_a is ahead of car_b, and back of car_a is behind_car_b
-    bigger_car = And([
+    bigger_car = And((
         LEQ(front_b, front_a),
         LEQ(rear_a, rear_b)
-    ])
+    ))
 
     # Front of car_a is in between the front & rear of car_b
-    a_front_between = And([
+    a_front_between = And((
         LEQ(rear_b, front_a),
         LEQ(front_a, front_b)
-    ])
+    ))
 
-    return And([
+    return And((
         LEQ(left_b, right_a),
-        Or([a_rear_between, bigger_car, a_front_between])
-    ])
+        Or((a_rear_between, bigger_car, a_front_between))
+    ))
 
 
 def turning_left(car: Obstacle) -> STLExp:
@@ -135,23 +135,23 @@ def single_lane(car: Obstacle, lane_centres: List[float], lane_widths: float) ->
             else:
                 lane_choices.append(Neg(in_lane(car, lane_centres[j], lane_widths)))
 
-        single_lane_options.append(And(lane_choices))
+        single_lane_options.append(And(tuple(lane_choices)))
 
-    return Or(single_lane_options)
+    return Or(tuple(single_lane_options))
 
 
 def cut_in(behind_car: Obstacle, cutter_car: Obstacle, lane_centres: List[float], lane_widths: float) -> STLExp:
     def y_diff(s: Dict[int, KSState]) -> float:
-        behind_y = s[behind_car.obstacle_id].position[1]
-        cut_y = s[cutter_car.obstacle_id].position[1]
+        behind_y : float = s[behind_car.obstacle_id].position[1]
+        cut_y: float = s[cutter_car.obstacle_id].position[1]
         return behind_y - cut_y
 
-    return And([Neg(single_lane(cutter_car, lane_centres, lane_widths)),
-                Or([
-                    And([GEQ0(y_diff), turning_left(cutter_car)]),
-                    And([LEQ0(y_diff), turning_right(cutter_car)])
-                ]),
-                in_same_lane(behind_car, cutter_car, lane_centres, lane_widths)])
+    return And((Neg(single_lane(cutter_car, lane_centres, lane_widths)),
+                Or((
+                    And((GEQ0(y_diff), turning_left(cutter_car))),
+                    And((LEQ0(y_diff), turning_right(cutter_car)))
+                )),
+                in_same_lane(behind_car, cutter_car, lane_centres, lane_widths)))
 
 
 def keeps_safe_distance_prec(behind_car: Obstacle, front_car: Obstacle, acc_min: float, reaction_time: float) -> STLExp:
@@ -186,12 +186,12 @@ def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_cent
     front_lane_checks = []
     for other_car in other_cars:
         front_lane_checks.append(
-            And([
+            And((
                 in_front_of(other_car, ego_car),
                 in_same_lane(ego_car, other_car, lane_centres, lane_widths),
-            ])
+            ))
         )
-    nothing_up_front = Neg(Or(front_lane_checks))
+    nothing_up_front = Neg(Or(tuple(front_lane_checks)))
 
     def abrupt_difference(behind_car: Obstacle, front_car: Obstacle) -> STLExp:
         def acc_diff(s: Dict[int, CustomState]) -> float:
@@ -207,35 +207,20 @@ def unnecessary_braking(ego_car: Obstacle, other_cars: List[Obstacle], lane_cent
 
     follow_abruptness = []
     for other_car in other_cars:
-        follow_abruptness.append(And([
+        follow_abruptness.append(And((
             keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time),
             in_front_of(other_car, ego_car),
             in_same_lane(ego_car, other_car, lane_centres, lane_widths),
             abrupt_difference(ego_car, other_car)
-        ]))
+        )))
 
-    abruptness = Or([
-        And([nothing_up_front, LEQc(ego_acc, a_abrupt)]),
-        Or(follow_abruptness)
-    ])
+    abruptness = Or((
+        And((nothing_up_front, LEQc(ego_acc, a_abrupt))),
+        Or(tuple(follow_abruptness))
+    ))
 
-    return And([LEQ0(ego_acc), abruptness])
+    return And((LEQ0(ego_acc), abruptness))
 
-
-# def keeps_lane_speed_limit() -> float:
-#     return 0.0
-#
-#
-# def keeps_type_speed_limit() -> float:
-#     return 0.0
-#
-#
-# def keeps_fov_speed_limit() -> float:
-#     return 0.0
-#
-#
-# def keeps_braking_speed_limit() -> float:
-#     return 0.0
 
 def car_v(c: Obstacle) -> Callable:
     def f(s: Dict[int, KSState]) -> float:
@@ -248,12 +233,12 @@ def slow_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle], lane_cen
                          speed_limit: float, slow_delta: float) -> STLExp:
     slow_lvs = []
     for other_car in other_cars:
-        slow_lvs.append(And([
+        slow_lvs.append(And((
             LEQc(car_v(other_car), speed_limit - slow_delta),
             in_same_lane(ego_car, other_car, lane_centres, lane_widths),
             in_front_of(other_car, ego_car)
-        ]))
-    return Or(slow_lvs)
+        )))
+    return Or(tuple(slow_lvs))
 
 
 def preserves_flow(car: Obstacle, speed_limit: float, slow_delta: float) -> STLExp:
@@ -270,16 +255,16 @@ def in_congestion(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: L
 
     con_contrib = []
     for other_car in other_cars:
-        con_contrib.append(And([
+        con_contrib.append(And((
             in_same_lane(ego_car, other_car, lane_centres, lane_widths),
             in_front_of(other_car, ego_car),
             LEQc(car_v(other_car), congestion_vel)
-        ]))
+        )))
 
     congestion_combs = list(combinations(con_contrib, congestion_size))
     assert len(congestion_combs) == math.comb(len(other_cars), congestion_size)
 
-    return Or([And(list(cong_comb)) for cong_comb in congestion_combs])
+    return Or(tuple([And(tuple(cong_comb)) for cong_comb in congestion_combs]))
 
 
 def in_slow_moving_traffic(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float], lane_widths: float,
@@ -296,12 +281,12 @@ def exist_standing_leading_vehicle(ego_car: Obstacle, other_cars: List[Obstacle]
                                    lane_widths: float, error_bound: float) -> STLExp:
     standing_leads = []
     for other_car in other_cars:
-        standing_leads.append(And([
+        standing_leads.append(And((
             in_same_lane(ego_car, other_car, lane_centres, lane_widths),
             in_front_of(other_car, ego_car),
             in_standstill(other_car, error_bound)
-        ]))
-    return Or(standing_leads)
+        )))
+    return Or(tuple(standing_leads))
 
 
 def in_standstill(car: Obstacle, error_bound: float) -> STLExp:
@@ -319,10 +304,10 @@ def slightly_higher_speed(car_a: Obstacle, car_b: Obstacle, diff_thresh: float):
     def f(s: Dict[int, KSState]) -> float:
         return s[car_a.obstacle_id].velocity - s[car_b.obstacle_id].velocity
 
-    return And([
+    return And((
         GEQ0(f),
         LEQc(f, diff_thresh)
-    ])
+    ))
 
 
 # def left_of_broad_marking():
@@ -338,7 +323,7 @@ def on_access_ramp(car: Obstacle, access_cs: List[float], lane_widths: float) ->
 
 
 def on_main_carriageway(car: Obstacle, main_cw_cs: List[float], lane_widths: float) -> STLExp:
-    return Or([in_lane(car, l, lane_widths) for l in main_cw_cs])
+    return Or(tuple([in_lane(car, l, lane_widths) for l in main_cw_cs]))
 
 
 # def main_carriageway_right_lane():
@@ -347,13 +332,13 @@ def on_main_carriageway(car: Obstacle, main_cw_cs: List[float], lane_widths: flo
 
 def safe_dist_rule(ego_car: Obstacle, other_car: Obstacle, lane_centres: List[float], lane_widths: float,
                    acc_min: float, reaction_time: float, t_cut_in: int) -> STLExp:
-    positioning = And([in_same_lane(ego_car, other_car, lane_centres, lane_widths),
-                       in_front_of(other_car, ego_car)])
+    positioning = And((in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+                       in_front_of(other_car, ego_car)))
     cutting_behaviour = Neg(O(
-        And([cut_in(ego_car, other_car, lane_centres, lane_widths),
-             H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 2)
-             ]), 0, t_cut_in))
-    lhs = And([positioning, cutting_behaviour])
+        And((cut_in(ego_car, other_car, lane_centres, lane_widths),
+             H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 1)
+             )), 0, t_cut_in))
+    lhs = And((positioning, cutting_behaviour))
     # lhs = positioning
 
     rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
@@ -364,19 +349,19 @@ def safe_dist_rule_multi(ego_car: Obstacle, other_cars: List[Obstacle], lane_cen
                          acc_min: float, reaction_time: float, t_cut_in: int):
     safe_dist_conds = []
     for other_car in other_cars:
-        positioning = And([in_same_lane(ego_car, other_car, lane_centres, lane_widths),
-                           in_front_of(other_car, ego_car)])
+        positioning = And((in_same_lane(ego_car, other_car, lane_centres, lane_widths),
+                           in_front_of(other_car, ego_car)))
         cutting_behaviour = Neg(O(
-            And([cut_in(ego_car, other_car, lane_centres, lane_widths),
+            And((cut_in(ego_car, other_car, lane_centres, lane_widths),
                  H(Neg(cut_in(ego_car, other_car, lane_centres, lane_widths)), 1, 1)
-                 ]), 0, t_cut_in))
-        lhs = And([positioning, cutting_behaviour])
+                 )), 0, t_cut_in))
+        lhs = And((positioning, cutting_behaviour))
         # lhs = positioning
 
         rhs = keeps_safe_distance_prec(ego_car, other_car, acc_min, reaction_time)
         safe_dist_conds.append(G(Implies(lhs, rhs), 0, np.inf))
 
-    return And(safe_dist_conds)
+    return And(tuple(safe_dist_conds))
 
 
 def no_unnecessary_braking_rule(ego_car: Obstacle, other_cars: List[Obstacle], lane_centres: List[float],
@@ -411,23 +396,23 @@ def faster_than_left_rule(ego_car: Obstacle, other_cars, main_cw_cs: List[float]
     lane_centres = [*main_cw_cs, *access_cs]
     faster_left_cars = []
     for other_car in other_cars:
-        lhs = And([left_of(other_car, ego_car), drives_faster(ego_car, other_car)])
+        lhs = And((left_of(other_car, ego_car), drives_faster(ego_car, other_car)))
         remaining_cars = [o for o in other_cars if o.obstacle_id != other_car.obstacle_id]
-        blocked = Or([
+        blocked = Or((
             in_congestion(other_car, remaining_cars, lane_centres, lane_widths, congestion_vel, congestion_size),
             in_vehicle_queue(other_car, remaining_cars, lane_centres, lane_widths, queue_vel, queue_size),
             in_slow_moving_traffic(other_car, remaining_cars, lane_centres, lane_widths, slow_traff_vel, traffic_size)
-        ])
-        faster_than_blocked = And([blocked, slightly_higher_speed(ego_car, other_car, diff_thresh)])
+        ))
+        faster_than_blocked = And((blocked, slightly_higher_speed(ego_car, other_car, diff_thresh)))
 
-        access_ramp_exempt = And([
+        access_ramp_exempt = And((
             on_access_ramp(ego_car, access_cs, lane_widths),
             on_main_carriageway(other_car, main_cw_cs, lane_widths),
             Neg(blocked)
-        ])
-        faster_left_cars.append(Implies(lhs, Or([faster_than_blocked, access_ramp_exempt])))
+        ))
+        faster_left_cars.append(Implies(lhs, Or((faster_than_blocked, access_ramp_exempt))))
 
-    return G(And(faster_left_cars), 0, np.inf)
+    return G(And(tuple(faster_left_cars)), 0, np.inf)
 
 
 # def consider_entering_vehicles_rule_old(ego_car: Obstacle, other_cars: List[Obstacle], main_cw_cs: List[float],
@@ -454,23 +439,23 @@ def consider_entering_vehicles_rule(ego_car: Obstacle, other_cars: List[Obstacle
     access_considerations = []
     rh_lane = min(main_cw_cs)
     for other_car in other_cars:
-        lhs = And([
+        lhs = And((
             on_main_carriageway(ego_car, main_cw_cs, lane_widths),
             Neg(in_lane(ego_car, rh_lane, lane_widths)),
             in_front_of(other_car, ego_car),
             on_access_ramp(other_car, access_cs, lane_widths),
-            F(And([on_main_carriageway(other_car, main_cw_cs, lane_widths),
-                   Neg(on_access_ramp(other_car, access_cs, lane_widths))]), 0, np.inf)
-        ])
+            F(And((on_main_carriageway(other_car, main_cw_cs, lane_widths),
+                   Neg(on_access_ramp(other_car, access_cs, lane_widths)))), 0, np.inf)
+        ))
 
         rhs = U(Neg(in_lane(ego_car, rh_lane, lane_widths)),
-                And([
+                And((
                     on_main_carriageway(other_car, main_cw_cs, lane_widths),
                     Neg(on_access_ramp(other_car, access_cs, lane_widths))
-                ]), 0, np.inf)
+                )), 0, np.inf)
 
         access_considerations.append(Implies(lhs, rhs))
-    return G(And(access_considerations), 0, np.inf)
+    return G(And(tuple(access_considerations)), 0, np.inf)
 
 
 def run():
