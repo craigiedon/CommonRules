@@ -35,9 +35,8 @@ def GEQ(f: Callable, g: Callable) -> STLExp:
     return GEQ0(lambda x: f(x) - g(x))
 
 
-@dataclass(frozen=True)
-class LEQ0(STLExp):
-    f: Callable
+def LEQ0(f: Callable) -> STLExp:
+    return GEQ0(lambda x: -f(x))
 
 
 def LEQc(f: Callable, c: float) -> STLExp:
@@ -125,7 +124,7 @@ def stl_children(spec: STLExp) -> Sequence[STLExp]:
             return [e1, e2]
         case F(e, _, _) | G(e, _, _) | Neg(e) | H(e, _, _) | O(e, _, _):
             return [e]
-        case GEQ0() | LEQ0() | Tru():
+        case GEQ0() | Tru():
             return []
         case _:
             raise ValueError("Unknown STL Case")
@@ -141,7 +140,6 @@ def stl_tree(spec: STLExp) -> Sequence[STLExp]:
     return listed_tree
 
 
-
 def remove_nones() -> List:
     return list(filter(lambda v: v is not None, x))
 
@@ -150,13 +148,8 @@ def comp_sat_tru(x) -> np.ndarray:
     return np.full(len(x), np.inf)
 
 
-def comp_sat_compare(spec: Union[LEQ0, GEQ0], xs) -> np.ndarray:
-    match spec:
-        case LEQ0(f):
-            ys = [f(x) for x in xs]
-            return -np.array([f(x) for x in xs])
-        case GEQ0(f):
-            return np.array([f(x) for x in xs])
+def comp_sat_compare(spec: GEQ0, xs) -> np.ndarray:
+    return np.array([spec.f(x) for x in xs])
 
 
 def comp_sat_neg(x) -> np.ndarray:
@@ -347,7 +340,7 @@ def stl_monitor_fast(spec: STLExp, x: Any):
     match spec:
         case Tru():
             return comp_sat_tru(x)
-        case GEQ0(_) | LEQ0(_):
+        case GEQ0(_):
             return comp_sat_compare(spec, x)
         case Neg(e):
             w = stl_monitor_fast(e, x)
@@ -488,8 +481,6 @@ def sc_rob_pos(spec: STLExp, x, t: int, b: float) -> float:
         return np.inf
     if isinstance(spec, GEQ0):
         return rect_pos(spec.f(x[t]), b)
-    if isinstance(spec, LEQ0):
-        return rect_pos(-spec.f(x[t]), b)
     if isinstance(spec, Neg):
         return -sc_rob_neg(spec.e, x, t, b)
     if isinstance(spec, And):
@@ -518,8 +509,6 @@ def sc_rob_neg(spec: STLExp, x, t: int, b: float) -> float:
         return 0.0
     if isinstance(spec, GEQ0):
         return rect_neg(spec.f(x[t]), b)
-    if isinstance(spec, LEQ0):
-        return rect_neg(-spec.f(x[t]), b)
     if isinstance(spec, Neg):
         return -sc_rob_pos(spec.e, x, t, b)
     if isinstance(spec, And):
@@ -545,7 +534,7 @@ def sc_rob_neg(spec: STLExp, x, t: int, b: float) -> float:
 def classic_to_agm_norm(spec: STLExp, low: float, high: float) -> STLExp:
     if isinstance(spec, Tru):
         return spec
-    if isinstance(spec, (GEQ0, LEQ0)):
+    if isinstance(spec, GEQ0):
         return dataclasses.replace(spec, f=lambda *args: 2 * range_norm(spec.f(*args), low, high))
     if isinstance(spec, (Neg, G, F)):
         return dataclasses.replace(spec, e=classic_to_agm_norm(spec.e, low, high))
@@ -563,8 +552,6 @@ def agm_rob(spec: STLExp, x, t: int) -> float:
         return 1.0
     if isinstance(spec, GEQ0):
         return 0.5 * spec.f(x[t])
-    if isinstance(spec, LEQ0):
-        return -0.5 * spec.f(x[t])
     if isinstance(spec, Neg):
         return -agm_rob(spec.e, x, t)
     if isinstance(spec, And):

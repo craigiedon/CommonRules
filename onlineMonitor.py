@@ -96,10 +96,6 @@ def wl_max(wls: List[WorkList]) -> WorkList:
 def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]],
                      spec: STLExp, x: Any, t: int) -> None:
     match spec:
-        case LEQ0(f):
-            if hor_map[spec][0] <= t <= hor_map[spec][1]:
-                r_val = -f(x)
-                wl_map[spec] = add_wl_point(wl_map[spec], t, r_val)
         case GEQ0(f):
             if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = f(x)
