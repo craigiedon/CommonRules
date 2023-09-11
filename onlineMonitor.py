@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, Mapping, Dict, DefaultDict
@@ -92,6 +93,11 @@ def wl_min(wls: List[WorkList]) -> WorkList:
 def wl_max(wls: List[WorkList]) -> WorkList:
     return wl_pointwise_op(wls, np.max)
 
+
+def update_work_list_pure(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]], spec: STLExp, x: Any, t: int) -> Dict[STLExp, WorkList]:
+    cloned_map = copy.deepcopy(wl_map)
+    update_work_list(cloned_map, hor_map, spec, x, t)
+    return cloned_map
 
 def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]],
                      spec: STLExp, x: Any, t: int) -> None:
