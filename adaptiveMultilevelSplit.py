@@ -17,18 +17,17 @@ def first_pred(xs: List[Any], pred: Callable[[Any], bool]) -> int:
 
 def level_partition(xs: np.ndarray, level: float) -> Tuple[np.ndarray, np.ndarray]:
     idxs = np.arange(len(xs))
-    val_mask = xs <= level
+    val_mask = xs < level
     saved_idxs, discard_idxs = idxs[val_mask], idxs[~val_mask]
     assert len(saved_idxs) + len(discard_idxs) == len(idxs)
     return saved_idxs, discard_idxs
 
 
-def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sample_size: int, num_discard: int,
+def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sim_T: int, sample_size: int, num_discard: int,
                          final_level: float) -> float:
     stage_trajs = []
     # stage_rob_hists = []
     stage_wl_maps_hist = []
-    sim_T = 10
     h_map = gen_hor_map(spec)
 
     for i in range(sample_size):
@@ -53,11 +52,20 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sample_s
     # Lower is better (as that means negative robustness)
     # Each round, we want to dicard <num_discard> of the *highest* robustness ones
     final_rob_vals = np.array([wmh[-1][spec].vs[0] for wmh in stage_wl_maps_hist])
+    # shuffle_sorted = sorted(random.sample(list(enumerate(final_rob_vals)), k=len(final_rob_vals)), key=lambda x: x[1], reverse=True)
+    # current_level = shuffle_sorted[num_discard][1]
     current_level = sorted(final_rob_vals, reverse=True)[num_discard]
 
     stage_discards = []
     while current_level > final_level:
         saved_idxs, discard_idxs = level_partition(final_rob_vals, current_level)
+        if len(saved_idxs) == 0:
+            print(f"Extinction at level: {current_level}")
+            break
+        # sorted_ids = [i for i, x in shuffle_sorted]
+        # discard_idxs, saved_idxs = sorted_ids[:num_discard], sorted_ids[num_discard:]
+        # assert len(discard_idxs) == num_discard
+        # assert len(saved_idxs) == sample_size - num_discard
         stage_discards.append(len(discard_idxs))
         print(f"Current Level: {current_level}, Final Level: {final_level}, Discards: {len(discard_idxs)}")
 
@@ -71,7 +79,7 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sample_s
             cloned_traj = copy.deepcopy(stage_trajs[clone_idx])
             cloned_maps = copy.deepcopy(stage_wl_maps_hist[clone_idx])
 
-            level_entry = first_pred(cloned_maps, lambda x: x[spec].vs[0] <= current_level)
+            level_entry = first_pred(cloned_maps, lambda x: x[spec].vs[0] < current_level)
 
             current_resample_traj = cloned_traj[level_entry]
             current_wl_map = cloned_maps[level_entry]
@@ -93,7 +101,12 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sample_s
 
         final_rob_vals = np.array([wmh[-1][spec].vs[0] for wmh in stage_wl_maps_hist])
         current_level = sorted(final_rob_vals, reverse=True)[num_discard]
+        # shuffle_sorted = sorted(random.sample(list(enumerate(final_rob_vals)), k=len(final_rob_vals)), key=lambda x: x[1], reverse=True)
+        # current_level = shuffle_sorted[num_discard][1]
 
+    final_prop = len(final_rob_vals[final_rob_vals <= final_level]) / sample_size
+    stage_props = np.array([(sample_size - K_m) / sample_size for K_m in stage_discards])
+    fail_p = final_prop * np.prod(stage_props)
     failure_probability = np.prod([(sample_size - K_m) / sample_size for K_m in stage_discards]) * (
             1 / sample_size) * len(final_rob_vals[final_rob_vals <= final_level])
     return failure_probability
@@ -111,15 +124,15 @@ def run():
     start_state = 0
     sim_func = simple_sim
     spec= G(GEQ0(lambda x: x), 0, np.inf)
+    sim_T = 10
     sample_size = 1000
-    num_discard = int(0.9 * sample_size)
-    final_level = -8
-    failure_prob = adaptive_multi_split(start_state, sim_func, spec, sample_size, num_discard, final_level)
+    num_discard = int(0.90 * sample_size)
+    final_level = -9
+    failure_prob = adaptive_multi_split(start_state, sim_func, spec, sim_T, sample_size, num_discard, final_level)
     print("AMS Failure Prob:", failure_prob)
 
     # Raw monte carlo version
     N = 1000000
-    sim_T = 10
     trajectories = []
     for n in range(N):
         traj = [start_state]
