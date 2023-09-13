@@ -21,7 +21,7 @@ import torch.nn as nn
 from Raycasting import ray_intersect, radial_ray_batch, occlusions_from_ray_hits
 from immFilter import t_state_pred, sticky_m_trans, AffineModel, StateFeedbackModel, \
     unif_cat_prior, closest_lane_prior, IMMResult, imm_kalman_optional
-from utils import angle_diff, rot_mat, obs_long_lats, RecedingHorizonStats
+from utils import angle_diff, rot_mat, obs_long_lats, RecedingHorizonStats, RecHorStat
 
 
 @dataclass
@@ -146,10 +146,10 @@ def car_mpc(T: int, start_state: State, task: TaskConfig,
             # y_left_slack = 50
             # Note: We have a car length of slack as our distance boundary
             d_diffs_x = (0.5 * obs.obstacle_shape.length + 1.5 * task.car_length + (vxs * task.dt) + (
-                        axs * task.dt ** 2) + 3) - casadi.fabs(xs - d_xs)
+                    axs * task.dt ** 2) + 3) - casadi.fabs(xs - d_xs)
 
             d_diffs_y = (0.5 * obs.obstacle_shape.width + task.car_width + 1.5 + (vys * task.dt) + (
-                        ays * task.dt ** 2)) - casadi.fabs(ys - d_ys)
+                    ays * task.dt ** 2)) - casadi.fabs(ys - d_ys)
 
             sharp = 10
             d_dist_x = casadi.log(1 + casadi.exp(sharp * d_diffs_x)) / sharp
@@ -572,127 +572,105 @@ def car_visibilities_raycast(n_rays: int, current_state: CustomState, i: int, ob
     return np.array(visibilities)
 
 
-def kalman_receding_horizon(total_time: float, horizon_length: float, start_state: InitialState, scenario: Scenario,
+def initialize_rec_hor_stat(obs: List[Obstacle], long_models: List[AffineModel], lat_models: List[AffineModel],
+                            start_step: int, end_step: int, prediction_steps: int) -> RecHorStat:
+    obstacle_longs, obstacle_lats = obs_long_lats(obs, start_step, end_step)
+    est_long_res = {o.obstacle_id: initial_long(o, obstacle_longs, long_models) for o in obs}
+    est_lat_res = {o.obstacle_id: initial_lat(o, obstacle_lats, lat_models) for o in obs}
+
+    obs_traj_data: RecHorStat = RecHorStat(
+        true_long={oid: e.fused_mu for oid, e in est_long_res.items()},
+        true_lat={oid: e.fused_mu for oid, e in est_lat_res.items()},
+        observed_long=None,
+        observed_lat=None,
+        est_long=est_long_res,
+        est_lat=est_lat_res,
+        prediction_traj_long={oid: t_state_pred(e.fused_mu, long_models, e.model_ps, prediction_steps) for oid, e in
+                              est_long_res.items()},
+        prediction_traj_lat={oid: t_state_pred(e.fused_mu, lat_models, e.model_ps, prediction_steps) for oid, e in
+                             est_lat_res.items()})
+
+    return obs_traj_data
+
+
+def kalman_receding_horizon(start_step: int, sim_steps: int, prediction_steps: int, start_state: InitialState,
+                            start_ests: Optional[RecHorStat], scenario: Scenario,
                             task_config: TaskConfig, long_models: List[AffineModel],
                             lat_models: List[StateFeedbackModel], observation_func: typing.Callable,
-                            cws: CostWeights) -> Tuple[List[CustomState], Dict[int, RecedingHorizonStats]]:
-    T = int(np.round(total_time / task_config.dt))
-    res = None
+                            cws: CostWeights) -> Tuple[List[CustomState], List[RecHorStat]]:
+    assert start_step >= 0
+    assert sim_steps > 0
+    # prediction_steps = int(round(horizon_length / task_config.dt)) - 1
     current_state = start_state
 
-    obstacle_longs, obstacle_lats = obs_long_lats(scenario.obstacles, 0, T)
+    obstacle_longs, obstacle_lats = obs_long_lats(scenario.obstacles, start_step, start_step + sim_steps)
 
     # Setup initial state estimation
-    est_long_res = {o.obstacle_id: initial_long(o, obstacle_longs, long_models) for o in scenario.obstacles}
-    est_lat_res = {o.obstacle_id: initial_lat(o, obstacle_lats, lat_models) for o in scenario.obstacles}
-
-    prediction_steps = int(round(horizon_length / task_config.dt)) - 1
-
     dn_state_list = [current_state]
+    traj_ob_model_data: List[RecHorStat] = []
 
-    obs_traj_data: Dict[int, RecedingHorizonStats] = {o.obstacle_id:
-        RecedingHorizonStats(
-            true_longs=[est_long_res[o.obstacle_id].fused_mu],
-            true_lats=[est_lat_res[o.obstacle_id].fused_mu],
-            observed_longs=[None],
-            observed_lats=[None],
-            est_longs=[est_long_res[o.obstacle_id].fused_mu],
-            est_lats=[est_lat_res[o.obstacle_id].fused_mu],
-            prediction_traj_longs=[
-                t_state_pred(est_long_res[o.obstacle_id].fused_mu, long_models, est_long_res[o.obstacle_id].model_ps,
-                             prediction_steps)],
-            prediction_traj_lats=[
-                t_state_pred(est_lat_res[o.obstacle_id].fused_mu, lat_models, est_lat_res[o.obstacle_id].model_ps,
-                             prediction_steps)]
-        ) for o in scenario.obstacles}
-
-    pred_longs = {o.obstacle_id: t_state_pred(est_long_res[o.obstacle_id].fused_mu, long_models,
-                                              est_long_res[o.obstacle_id].model_ps, prediction_steps) for
-                  o in scenario.obstacles}
-    pred_lats = {o.obstacle_id: t_state_pred(est_lat_res[o.obstacle_id].fused_mu, lat_models,
-                                             est_lat_res[o.obstacle_id].model_ps, prediction_steps) for o
-                 in scenario.obstacles}
+    if start_ests is None:
+        traj_ob_model_data.append(
+            initialize_rec_hor_stat(scenario.obstacles, long_models, lat_models, start_step, start_step + sim_steps, prediction_steps))
+    else:
+        traj_ob_model_data.append(start_ests)
 
     cvx_prob_config = create_cvx_mpc(prediction_steps + 1, task_config, scenario.obstacles)
 
-    for i in range(1, T):
-        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, pred_longs, pred_lats)
+    tru_long_states = np.array(list(obstacle_longs.values()))
+    tru_lat_states = np.array(list(obstacle_lats.values()))
+
+    for i in range(1, sim_steps):
+        t = start_step + i
+        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, traj_ob_model_data[-1].prediction_traj_long,
+                           traj_ob_model_data[-1].prediction_traj_lat)
         if cvx_warm is not None:
-            # res = point_to_kin_res(cvx_warm)
             warm_start = point_to_kin_res(cvx_warm)
         else:
             warm_start = None
-        # if cvx_warm is not None:
-        #     res = point_to_kin_res(cvx_warm)
-        # else:
         res = car_mpc(prediction_steps + 1, current_state, task_config,
-                      scenario.obstacles, pred_longs, pred_lats, cws, warm_start)
+                      scenario.obstacles, traj_ob_model_data[-1].prediction_traj_long, traj_ob_model_data[-1].prediction_traj_lat, cws,
+                      warm_start)
         current_state = CustomState(position=np.array([res.xs[1], res.ys[1]]), velocity=res.vs[1],
                                     orientation=res.hs[1],
-                                    acceleration=res.accs[1], time_step=i)
+                                    acceleration=res.accs[1], time_step=t)
         dn_state_list.append(current_state)
 
-
         # Calculating Visibilities from Raycasts
-        visibilities = car_visibilities_raycast(100, current_state, i, scenario.obstacles)
+        visibilities = car_visibilities_raycast(100, current_state, t, scenario.obstacles)
 
-        tru_long_states = np.array(list(obstacle_longs.values()))
-        tru_lat_states = np.array(list(obstacle_lats.values()))
-
-        z_longs, z_lats = observation_func(scenario.obstacles, current_state, i, tru_long_states[:, i],
+        z_longs, z_lats = observation_func(scenario.obstacles, current_state, t, tru_long_states[:, i],
                                            tru_lat_states[:, i], visibilities)
 
         z_longs = {o.obstacle_id: z for o, z in zip(scenario.obstacles, z_longs)}
         z_lats = {o.obstacle_id: z for o, z in zip(scenario.obstacles, z_lats)}
 
-        est_long_res = {o.obstacle_id: imm_kalman_optional(
-            long_models,
-            sticky_m_trans(len(long_models), 0.95),
-            est_long_res[o.obstacle_id].model_ps,
-            est_long_res[o.obstacle_id].model_mus,
-            est_long_res[o.obstacle_id].model_covs,
-            z_longs[o.obstacle_id]) for o in scenario.obstacles}
-
-        est_lat_res = {o.obstacle_id: imm_kalman_optional(
-            lat_models,
-            sticky_m_trans(len(lat_models), 0.95),
-            est_lat_res[o.obstacle_id].model_ps,
-            est_lat_res[o.obstacle_id].model_mus,
-            est_lat_res[o.obstacle_id].model_covs,
-            z_lats[o.obstacle_id]) for o in scenario.obstacles}
+        est_long_res = {oid: imm_kalman_optional(long_models, sticky_m_trans(len(long_models), 0.95), e, z_longs[oid])
+                        for oid, e in traj_ob_model_data[-1].est_long.items()}
+        est_lat_res = {oid: imm_kalman_optional(lat_models, sticky_m_trans(len(lat_models), 0.95), e, z_lats[oid]) for
+                       oid, e in traj_ob_model_data[-1].est_lat.items()}
 
         # Predict forward using top mode
-        pred_longs = {o.obstacle_id: t_state_pred(est_long_res[o.obstacle_id].fused_mu, long_models,
-                                                  est_long_res[o.obstacle_id].model_ps, prediction_steps) for
-                      o in scenario.obstacles}
-        pred_lats = {o.obstacle_id: t_state_pred(est_lat_res[o.obstacle_id].fused_mu, lat_models,
-                                                 est_lat_res[o.obstacle_id].model_ps, prediction_steps) for o
-                     in scenario.obstacles}
+        pred_longs = {oid: t_state_pred(e.fused_mu, long_models, e.model_ps, prediction_steps) for
+                      oid, e in est_long_res.items()}
+        pred_lats = {oid: t_state_pred(e.fused_mu, lat_models, e.model_ps, prediction_steps) for oid, e
+                     in est_lat_res.items()}
 
-        for o in scenario.obstacles:
-            obs_traj_data[o.obstacle_id].append_stat(obstacle_longs[o.obstacle_id][i], obstacle_lats[o.obstacle_id][i],
-                                                     z_longs[o.obstacle_id], z_lats[o.obstacle_id],
-                                                     est_long_res[o.obstacle_id].fused_mu,
-                                                     est_lat_res[o.obstacle_id].fused_mu,
-                                                     pred_longs[o.obstacle_id], pred_lats[o.obstacle_id])
+        traj_ob_model_data.append(
+            RecHorStat(
+                true_long={oid: ols[i] for oid, ols in obstacle_longs.items()},
+                true_lat={oid: ols[i] for oid, ols in obstacle_lats.items()},
+                observed_long=z_longs,
+                observed_lat=z_lats,
+                est_long=est_long_res,
+                est_lat=est_lat_res,
+                prediction_traj_long=pred_longs,
+                prediction_traj_lat=pred_lats
+            )
+        )
 
-        # res = car_mpc(prediction_steps + 1, current_state, task_config,
-        #               scenario.obstacles, pred_longs, pred_lats, cws, res)
-        # free = car_mpc(prediction_steps + 1, current_state, task_config,
-        #               [], {}, {}, cws, None)
-
-
-    for _, td in obs_traj_data.items():
-        assert len(td.prediction_traj_lats) == T
-        assert len(td.prediction_traj_longs) == T
-        assert len(td.true_lats) == T
-        assert len(td.true_longs) == T
-        assert len(td.est_lats) == T
-        assert len(td.est_longs) == T
-        assert len(td.observed_lats) == T
-        assert len(td.observed_longs) == T
-
-    return dn_state_list, obs_traj_data
+    assert len(traj_ob_model_data) == sim_steps
+    return dn_state_list, traj_ob_model_data
 
 
 def run():

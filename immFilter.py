@@ -340,13 +340,11 @@ class IMMResult:
 
 def imm_kalman_optional(models: List[AffineModel],
                         m_trans_ps: np.ndarray,
-                        old_model_ps: np.ndarray,
-                        old_mus: np.ndarray,
-                        old_covs: np.ndarray,
+                        old_res: IMMResult,
                         z: Optional[np.ndarray]) -> IMMResult:
     if z is not None:
-        return imm_kalman_filter(models, m_trans_ps, old_model_ps, old_mus, old_covs, z)
-    return imm_kalman_no_obs(models, m_trans_ps, old_model_ps, old_mus, old_covs)
+        return imm_kalman_filter(models, m_trans_ps, old_res.model_ps, old_res.model_mus, old_res.model_covs, z)
+    return imm_kalman_no_obs(models, m_trans_ps, old_res.model_ps, old_res.model_mus, old_res.model_covs)
 
 
 def imm_kalman_filter(models: List[AffineModel],

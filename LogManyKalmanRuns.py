@@ -81,7 +81,11 @@ def run():
 
         try:
             # kalman_start = time.time()
-            dn_state_list, prediction_stats = kalman_receding_horizon(end_time, 2.0, start_state, scenario, task_config,
+            # prediction_steps = int(round(horizon_length / task_config.dt)) - 1
+            sim_steps = int(round(end_time / task_config.dt))
+            start_ests = None
+            dn_state_list, prediction_stats = kalman_receding_horizon(0, sim_steps, int(round(2.0 / task_config.dt)) - 1,
+                                                                      start_state, start_ests, scenario, task_config,
                                                                       long_models, lat_models, observation_func, cws)
             # print(f"Took {time.time() - kalman_start}s")
         except Exception as e:

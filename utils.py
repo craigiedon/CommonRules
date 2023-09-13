@@ -8,6 +8,8 @@ from commonroad.scenario.obstacle import Obstacle, DynamicObstacle, ObstacleType
 from commonroad.scenario.state import CustomState
 from commonroad.scenario.trajectory import Trajectory
 
+from immFilter import IMMResult
+
 
 def rot_mat(r: float) -> np.ndarray:
     return np.array([
@@ -70,19 +72,30 @@ def mpc_result_to_dyn_obj(o_id, dn_state_list: List[CustomState], car_width: flo
 
 
 @dataclass
+class RecHorStat:
+    true_long: Dict[int, np.ndarray]
+    true_lat: Dict[int, np.ndarray]
+    observed_long: Dict[int, np.ndarray]
+    observed_lat: Dict[int, np.ndarray]
+    est_long: Dict[int, IMMResult]
+    est_lat: Dict[int, IMMResult]
+    prediction_traj_long: Dict[int, np.ndarray]
+    prediction_traj_lat: Dict[int, np.ndarray]
+
+@dataclass
 class RecedingHorizonStats:
     true_longs: List[np.ndarray] = field(default_factory=list)
     true_lats: List[np.ndarray] = field(default_factory=list)
     observed_longs: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
     observed_lats: List[Optional[np.ndarray]] = field(default_factory=list)  # Some time steps may get no observation
-    est_longs: List[np.ndarray] = field(default_factory=list)
-    est_lats: List[np.ndarray] = field(default_factory=list)
+    est_longs: List[IMMResult] = field(default_factory=list)
+    est_lats: List[IMMResult] = field(default_factory=list)
     prediction_traj_longs: List[np.ndarray] = field(default_factory=list)
     prediction_traj_lats: List[np.ndarray] = field(default_factory=list)
 
     def append_stat(self, true_long: np.ndarray, true_lat: np.ndarray,
                     obs_long: np.ndarray, obs_lat: np.ndarray,
-                    est_long: np.ndarray, est_lat: np.ndarray,
+                    est_long: IMMResult, est_lat: IMMResult,
                     pred_traj_long, pred_traj_lat):
         self.true_longs.append(true_long)
         self.true_lats.append(true_lat)
