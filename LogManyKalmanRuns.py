@@ -126,9 +126,9 @@ def run():
         fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
         # if np.any(np.array(rob_vals) < 0):
-        # animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
-        # plt.plot([s.acceleration for s in dn_state_list])
-        # plt.show()
+        animate_with_predictions(solution_scenario, prediction_stats, int(end_time / task_config.dt), show=True)
+        plt.plot([s.acceleration for s in dn_state_list])
+        plt.show()
 
         ## Then...calc and print out the results here!
 
