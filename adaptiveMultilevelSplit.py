@@ -179,7 +179,13 @@ def kal_run():
 
     sim_func = lambda ss, T: kalman_receding_horizon(T, 2.0, ss, scenario, task_config, long_models, lat_models, observation_func, cws)
 
-    failure_prob = adaptive_multi_split(start_state, kalman_receding_horizon)
+    sim_T = 40
+    sample_size = 100
+    num_discard = 0.1 * sample_size
+    final_level = 0.0
+    spec = None # TODO: Find one of the traffic rules from "gen traffic rules" (e.g., "no unnecessary braking") and stick it in here...
+
+    failure_prob = adaptive_multi_split(start_state, kalman_receding_horizon, spec, sim_T, sample_size, num_discard, final_level)
 
 def toy_run():
     start_state = 0
