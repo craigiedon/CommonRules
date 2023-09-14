@@ -597,7 +597,7 @@ def kalman_receding_horizon(start_step: int, sim_steps: int, prediction_steps: i
                             start_ests: Optional[RecHorStat], scenario: Scenario,
                             task_config: TaskConfig, long_models: List[AffineModel],
                             lat_models: List[StateFeedbackModel], observation_func: typing.Callable,
-                            cws: CostWeights) -> Tuple[List[CustomState], List[RecHorStat]]:
+                            cws: CostWeights) -> Tuple[List[CustomState], List[Dict[int, State]], List[RecHorStat]]:
     assert start_step >= 0
     assert sim_steps > 0
     # prediction_steps = int(round(horizon_length / task_config.dt)) - 1
@@ -670,7 +670,7 @@ def kalman_receding_horizon(start_step: int, sim_steps: int, prediction_steps: i
         )
 
     assert len(traj_ob_model_data) == sim_steps
-    return dn_state_list, traj_ob_model_data
+    return dn_state_list, [scenario.obstacle_states_at_time_step(i) for i in range(start_step, start_step + sim_steps)], traj_ob_model_data
 
 
 def run():

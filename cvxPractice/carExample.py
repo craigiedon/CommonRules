@@ -48,7 +48,7 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
     # z_dot = Az @ zs + Bz @ us
 
     # w_gx = 0.0
-    w_gy = 1.0
+    w_gy = 10.0
     w_ga = 50.0
     w_j = 10
     w_v = 0.5
