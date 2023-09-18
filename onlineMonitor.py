@@ -76,7 +76,6 @@ def fill_p_const_signal(desired_ts: List[int], sig_ts: np.ndarray, sig_vs: np.nd
 
 
 def wl_pointwise_op(wls: List[WorkList], op: Callable) -> WorkList:
-
     combined_ts: List[int] = sorted(set([t for wl in wls for t in wl.ts]))
 
     filled_vs = np.stack([fill_p_const_signal(combined_ts, wl.ts, wl.vs) for wl in wls])
@@ -94,14 +93,18 @@ def wl_max(wls: List[WorkList]) -> WorkList:
     return wl_pointwise_op(wls, np.max)
 
 
-def update_work_list_pure(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]], spec: STLExp, x: Any, t: int) -> Dict[STLExp, WorkList]:
+def update_work_list_pure(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]], spec: STLExp, x: Any,
+                          t: int) -> Dict[STLExp, WorkList]:
     cloned_map = copy.deepcopy(wl_map)
     update_work_list(cloned_map, hor_map, spec, x, t)
     return cloned_map
 
+
 def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple[int, int]],
                      spec: STLExp, x: Any, t: int) -> None:
     match spec:
+        case Tru():
+            wl_map[spec] = WorkList(np.array([0]), np.array([np.inf]))
         case GEQ0(f):
             if hor_map[spec][0] <= t <= hor_map[spec][1]:
                 r_val = f(x)
@@ -114,7 +117,16 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
                 update_work_list(wl_map, hor_map, e, x, t)
             sub_wls = [wl_map[e] for e in exps if len(wl_map[e].ts) > 0]
             if len(sub_wls) > 0:
-                wl_map[spec] = wl_min(sub_wls)
+                combined_subs = wl_min(sub_wls)
+                assert len(combined_subs.ts) == len(combined_subs.vs)
+                nominal_ts = []
+                nominal_vs = []
+                for comb_t, comb_v in zip(combined_subs.ts, combined_subs.vs):
+                    if comb_t <= t:
+                        nominal_ts.append(comb_t)
+                        nominal_vs.append(comb_v)
+
+                wl_map[spec] = WorkList(np.array(nominal_ts), np.array(nominal_vs))
         case Or(exps):
             for e in exps:
                 update_work_list(wl_map, hor_map, e, x, t)
@@ -166,7 +178,6 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             rvs_left = wl_map[e_1]
             rvs_right = wl_map[e_2]
 
-            # TODO: Is this "pointwise" function actually correct?
             worst_wls = wl_pointwise_op([rvs_left, rvs_right], np.min)
 
             assert len(rvs_left.ts) == len(worst_wls.ts)
@@ -211,7 +222,7 @@ def update_work_list(wl_map: Dict[STLExp, WorkList], hor_map: Dict[STLExp, Tuple
             raise ValueError("STL Expression Not Recognized")
 
 
-def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width:int, fill_v: float) -> np.ndarray:
+def online_min_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v: float) -> np.ndarray:
     return -online_max_lemire(-raw_xs, raw_ts, width, -fill_v)
 
 
@@ -219,7 +230,8 @@ def online_max_lemire(raw_xs: np.ndarray, raw_ts: np.ndarray, width: int, fill_v
     # assert raw_ts[0] == a
     assert len(raw_xs) == len(raw_ts)
     assert width >= 1, f"width (== {width}) should be at least 1"
-    assert np.isfinite(width), f"width == f{width}, Unbounded temporal operators should be dealt with before entering min/max lemire algorithm"
+    assert np.isfinite(
+        width), f"width == f{width}, Unbounded temporal operators should be dealt with before entering min/max lemire algorithm"
 
     # if len(raw_xs) == 4:
     #     print("Be here!")

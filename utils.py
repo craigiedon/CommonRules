@@ -1,3 +1,5 @@
+import dataclasses
+import json
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Optional
 
@@ -71,6 +73,15 @@ def mpc_result_to_dyn_obj(o_id, dn_state_list: List[CustomState], car_width: flo
                            dyn_obs_pred)
 
 
+class EnhancedJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        return super().default(o)
+
+
 @dataclass
 class RecHorStat:
     true_long: Dict[int, np.ndarray]
@@ -81,6 +92,7 @@ class RecHorStat:
     est_lat: Dict[int, IMMResult]
     prediction_traj_long: Dict[int, np.ndarray]
     prediction_traj_lat: Dict[int, np.ndarray]
+
 
 @dataclass
 class RecedingHorizonStats:
@@ -105,5 +117,3 @@ class RecedingHorizonStats:
         self.est_lats.append(est_lat)
         self.prediction_traj_longs.append(pred_traj_long)
         self.prediction_traj_lats.append(pred_traj_lat)
-
-

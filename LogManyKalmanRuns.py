@@ -101,7 +101,7 @@ def run():
 
         solution_state_dict = [solution_scenario.obstacle_states_at_time_step(i) for i in range(len(dn_state_list))]
 
-        rules = gen_interstate_rules(100, solution_scenario, all_lane_centres, lane_widths, ego_lane_centres,
+        rules = gen_interstate_rules(ego_soln_obj, scenario.obstacles, all_lane_centres, lane_widths, ego_lane_centres,
                                      all_lane_centres[0:1], irc)
 
         # rule_name = "rg_2"

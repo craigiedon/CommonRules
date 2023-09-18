@@ -6,6 +6,7 @@ from typing import Dict, List
 import numpy as np
 import time
 from commonroad.common.file_reader import CommonRoadFileReader
+from commonroad.scenario.obstacle import Obstacle, DynamicObstacle
 from commonroad.scenario.scenario import Scenario
 
 from stl import stl_rob, STLExp
@@ -34,33 +35,26 @@ class InterstateRulesConfig:
     faster_diff_thresh: float
 
 
-def gen_interstate_rules(ego_id: int, scenario: Scenario, lane_centres: List[float], lane_widths: float,
+def gen_interstate_rules(ego_car: DynamicObstacle, obstacles: List[Obstacle], lane_centres: List[float], lane_widths: float,
                          main_cw_cs: List[float], access_cs: List[float], irc: InterstateRulesConfig) -> Dict[
     str, STLExp]:
-    ego_car = scenario.obstacle_by_id(ego_id)
-    obstacles = [o for o in scenario.obstacles if o.obstacle_id != ego_id]
+    other_obstacles = [o for o in obstacles if o.obstacle_id != ego_car.obstacle_id]
     # dynamic_obstacles = [o for o in scenario.dynamic_obstacles if o.obstacle_id != ego_id]
 
     rule_dict = {
-        "rg_1": safe_dist_rule_multi(ego_car, obstacles, lane_centres, lane_widths, irc.acc_min, irc.reaction_time,
+        "rg_1": safe_dist_rule_multi(ego_car, other_obstacles, lane_centres, lane_widths, irc.acc_min, irc.reaction_time,
                                      int(np.round(irc.t_cut_in / irc.dt))),
-        "rg_2": no_unnecessary_braking_rule(ego_car, obstacles, lane_centres, lane_widths, irc.a_abrupt, irc.acc_min,
+        "rg_2": no_unnecessary_braking_rule(ego_car, other_obstacles, lane_centres, lane_widths, irc.a_abrupt, irc.acc_min,
                                             irc.reaction_time),
-        "rg_3": keeps_speed_limit_rule(ego_car, irc.max_vel),
-        "rg_4": traffic_flow_rule(ego_car, obstacles, lane_centres, lane_widths, irc.max_vel, irc.slow_delta),
-        "ri_1": interstate_stopping_rule(ego_car, obstacles, lane_centres, lane_widths, irc.stop_err_bound),
-        "ri_2": faster_than_left_rule(ego_car, obstacles, main_cw_cs, access_cs, lane_widths, irc.congestion_vel,
+        # "rg_3": keeps_speed_limit_rule(ego_car, irc.max_vel),
+        "rg_4": traffic_flow_rule(ego_car, other_obstacles, lane_centres, lane_widths, irc.max_vel, irc.slow_delta),
+        # "ri_1": interstate_stopping_rule(ego_car, other_obstacles, lane_centres, lane_widths, irc.stop_err_bound),
+        "ri_2": faster_than_left_rule(ego_car, other_obstacles, main_cw_cs, access_cs, lane_widths, irc.congestion_vel,
                                       irc.congestion_size, irc.queue_vel, irc.queue_size, irc.slow_traff_vel,
                                       irc.traffic_size,
                                       irc.faster_diff_thresh),
-        "ri_5": consider_entering_vehicles_rule(ego_car, obstacles, main_cw_cs, access_cs, lane_widths)}
-
-    # for o in obstacles:
-        # rule_dict[f"rg_1_{o.obstacle_id}"] = safe_dist_rule(ego_car, o, lane_centres, lane_widths, irc.acc_min, irc.reaction_time, int(np.round(irc.t_cut_in / irc.dt)))
-        # rule_dict[f"ri_2_{o.obstacle_id}"] = faster_than_left_rule(ego_car, [o], main_cw_cs, access_cs, lane_widths, irc.congestion_vel,
-        #                               irc.congestion_size, irc.queue_vel, irc.queue_size, irc.slow_traff_vel,
-        #                               irc.traffic_size,
-        #                               irc.faster_diff_thresh)
+        "ri_5": consider_entering_vehicles_rule(ego_car, other_obstacles, main_cw_cs, access_cs, lane_widths)
+    }
 
     return rule_dict
 
