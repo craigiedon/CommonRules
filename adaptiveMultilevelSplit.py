@@ -14,6 +14,7 @@ from commonroad.common.file_writer import CommonRoadFileWriter
 from commonroad.common.writer.file_writer_interface import OverwriteExistingFile
 from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.obstacle import DynamicObstacle, ObstacleType
+from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.state import InitialState
 
 from CarMPC import kalman_receding_horizon, pem_observation_batch, initialize_rec_hor_stat
@@ -146,7 +147,8 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sim_T: i
     failure_probability = np.prod([(sample_size - K_m) / sample_size for K_m in stage_discards]) * (
             1 / sample_size) * len(final_rob_vals[final_rob_vals <= final_level])
 
-    return stage_trajs, AMSResult(failure_probability, levels, stage_discards, rob_vals_per_level=np.array(rob_vals_per_level))
+    return stage_trajs, AMSResult(failure_probability, levels, stage_discards,
+                                  rob_vals_per_level=np.array(rob_vals_per_level))
 
 
 def simple_sim(start_state: int, T: int) -> List[int]:
@@ -197,14 +199,15 @@ def kal_run():
         cws = CostWeights(**json.load(f))
 
     sim_T = 40
-    sample_size = 100
+    sample_size = 1000
     num_discard = int(np.ceil(0.1 * sample_size))
     final_level = 0
 
     # start_state = InitialState(position=np.array([0.0 + task_config.car_length / 2.0, ego_lane_centres[0]]),
     #                            velocity=task_config.v_max - 15,
     #                            orientation=0, acceleration=0.0, time_step=0)
-    start_state = InitialState(position=np.array([15.0 + task_config.car_length / 2.0, ego_lane_centres[0]]), velocity=task_config.v_max - 15,
+    start_state = InitialState(position=np.array([15.0 + task_config.car_length / 2.0, ego_lane_centres[0]]),
+                               velocity=task_config.v_max - 15,
                                orientation=0, acceleration=0.0, time_step=0)
     start_est: RecHorStat = initialize_rec_hor_stat(scenario.obstacles, long_models, lat_models, 0, 0 + sim_T, 20)
 
@@ -233,8 +236,11 @@ def kal_run():
                                  all_lane_centres[0:1], irc)
     for rule_name, spec in rules.items():
         print("Rule: ", rule_name)
-        final_stage_trajs, ams_results = adaptive_multi_split(start_state, sim_func, spec, sim_T, sample_size, num_discard,
-                                                               final_level)
+
+        # raw_mc_fail_prob = raw_MC_prob(sim_func, start_state, spec, sim_T, sample_size, final_level, scenario, task_config)
+        final_stage_trajs, ams_results = adaptive_multi_split(start_state, sim_func, spec, sim_T, sample_size,
+                                                              num_discard,
+                                                              final_level)
         print("Failure Probability:", ams_results.failure_prob)
 
         rule_folder = os.path.join(results_folder, rule_name)
@@ -298,6 +304,31 @@ def toy_run():
     failing_vals = rob_vals[rob_vals <= final_level]
     print(len(failing_vals))
     print("Raw MC Prob:", len(failing_vals) / N)
+
+
+def raw_MC_prob(sim_func: Callable, start_state, spec: STLExp, sim_T: int, N: int, final_level: float, scenario: Scenario, task_config) -> float:
+    # Raw monte carlo version
+    # trajectories = []
+    ssds = []
+    for n in range(N):
+        ego_states, obs_state_dicts, obs_ests = sim_func(0, sim_T, start_state, None)
+        print(f"Raw MC Sim: {n}")
+        solution_scenario = copy.deepcopy(scenario)
+        ego_soln_obj = mpc_result_to_dyn_obj(100, ego_states, task_config.car_width,
+                                             task_config.car_length)
+        solution_scenario.add_objects(ego_soln_obj)
+
+        solution_state_dict = [solution_scenario.obstacle_states_at_time_step(i) for i in range(len(ego_states))]
+        # trajectories.append(ego_states)
+        ssds.append(solution_state_dict)
+
+    rob_vals = np.array([stl_rob(spec, ssd, 0) for ssd in ssds])
+
+    failing_vals = rob_vals[rob_vals <= final_level]
+    fail_prob = len(failing_vals) / N
+    print(len(failing_vals))
+    print("Raw MC Prob:", fail_prob)
+    return fail_prob
 
 
 if __name__ == "__main__":
