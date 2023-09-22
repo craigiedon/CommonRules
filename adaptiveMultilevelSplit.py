@@ -3,6 +3,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 import torch
 import random
@@ -228,7 +229,7 @@ def kal_run():
     with open("config/interstate_rule_config.json", 'r') as f:
         irc = InterstateRulesConfig(**json.load(f))
 
-    results_folder = f"results/AMS-{time.time_ns()}_N{sample_size}_K{num_discard}_L{final_level}"
+    results_folder = f"results/AMS-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_N{sample_size}_K{num_discard}_L{final_level}"
     ego_car = DynamicObstacle(100, ObstacleType.CAR,
                               Rectangle(width=task_config.car_width, length=task_config.car_length), start_state, None)
 
@@ -237,7 +238,7 @@ def kal_run():
     for rule_name, spec in rules.items():
         print("Rule: ", rule_name)
 
-        # raw_mc_fail_prob = raw_MC_prob(sim_func, start_state, spec, sim_T, sample_size, final_level, scenario, task_config)
+        raw_mc_fail_prob = raw_MC_prob(sim_func, start_state, spec, sim_T, sample_size, final_level, scenario, task_config)
         final_stage_trajs, ams_results = adaptive_multi_split(start_state, sim_func, spec, sim_T, sample_size,
                                                               num_discard,
                                                               final_level)
@@ -271,10 +272,6 @@ def kal_run():
                 json.dump(pred_stat, f, cls=EnhancedJSONEncoder)
 
     animate_with_predictions(solution_scenario, pred_stat, sim_T, show=True)
-
-    # TODO: Repeat for the others (safe dist definitely. Then maybe try merging and a few others to see if there is anything even worth pursuing...?)
-    # TODO: Check MPC to see if it actually tries to obey faster than left
-    # TODO: Can you decrease T/prediction length to make it faster?
 
 
 def toy_run():

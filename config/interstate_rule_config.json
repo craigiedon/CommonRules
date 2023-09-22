@@ -5,7 +5,7 @@
   "acc_min": -10.5,
   "max_vel": 36.6,
   "slow_delta": 15.0,
-  "a_abrupt": -5.0,
+  "a_abrupt": -4.75,
   "stop_err_bound": 0.01,
   "congestion_size": 3,
   "queue_size": 3,

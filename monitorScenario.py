@@ -42,8 +42,8 @@ def gen_interstate_rules(ego_car: DynamicObstacle, obstacles: List[Obstacle], la
     # dynamic_obstacles = [o for o in scenario.dynamic_obstacles if o.obstacle_id != ego_id]
 
     rule_dict = {
-        "rg_1": safe_dist_rule_multi(ego_car, other_obstacles, lane_centres, lane_widths, irc.acc_min, irc.reaction_time,
-                                     int(np.round(irc.t_cut_in / irc.dt))),
+        # "rg_1": safe_dist_rule_multi(ego_car, other_obstacles, lane_centres, lane_widths, irc.acc_min, irc.reaction_time,
+        #                              int(np.round(irc.t_cut_in / irc.dt))),
         "rg_2": no_unnecessary_braking_rule(ego_car, other_obstacles, lane_centres, lane_widths, irc.a_abrupt, irc.acc_min,
                                             irc.reaction_time),
         # "rg_3": keeps_speed_limit_rule(ego_car, irc.max_vel),
@@ -53,7 +53,7 @@ def gen_interstate_rules(ego_car: DynamicObstacle, obstacles: List[Obstacle], la
                                       irc.congestion_size, irc.queue_vel, irc.queue_size, irc.slow_traff_vel,
                                       irc.traffic_size,
                                       irc.faster_diff_thresh),
-        "ri_5": consider_entering_vehicles_rule(ego_car, other_obstacles, main_cw_cs, access_cs, lane_widths)
+        # "ri_5": consider_entering_vehicles_rule(ego_car, other_obstacles, main_cw_cs, access_cs, lane_widths)
     }
 
     return rule_dict
