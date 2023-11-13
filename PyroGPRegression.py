@@ -133,8 +133,8 @@ def run():
     plt.show()
 
     model_folder = f"models/nuscenes/sgp_reg"
-    save_sparse_gp(model_folder, vsgp)
-    vsgp = load_gp_reg(model_folder, True)
+    # save_sparse_gp(model_folder, vsgp)
+    # vsgp = load_gp_reg(model_folder, True)
 
     # torch.save(vsgp.state_dict(), f"models/nuscenes/sgp_reg_i{len(Xu)}.pt")
     # vsgp.load_state_dict(torch.load(f"models/nuscenes/sgp_reg_i{len(Xu)}.pt"))

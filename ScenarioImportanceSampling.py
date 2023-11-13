@@ -31,7 +31,7 @@ from anim_utils import animate_with_predictions
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
 from monitorScenario import gen_interstate_rules, InterstateRulesConfig
 from stl import stl_rob
-from utils import RecedingHorizonStats, rot_mat, angle_diff, obs_long_lats, mpc_result_to_dyn_obj
+from utils import RecedingHorizonStats, rot_mat, angle_diff, obs_long_lats, mpc_result_to_dyn_obj, RecHorStat
 
 
 class SimpleImportanceSampler(nn.Module):
@@ -353,6 +353,25 @@ def imp_obs_f(imp_sampler, norm_mus, norm_stds, fname):
                                                                               imp_sampler, norm_mus, norm_stds, vs,
                                                                               fname)
 
+
+def dets_and_noise_from_stats_new(rec_stats: List[RecHorStat]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    long_noises = []
+    lat_noises = []
+    det_ind = []
+    # Offset by 1 because we assume state is known at T=0
+    for rs in rec_stats[1:]:
+        det_ind.append(torch.tensor([1 if ol is not None else 0 for ol in rs.observed_long.values()], device='cuda'))
+        long_noises.append(torch.tensor(
+            [(ol[0] - tl[0]) if ol is not None else 0.0 for ol, tl in zip(rs.observed_long.values(), rs.true_long.values())],
+            dtype=torch.float, device='cuda'))
+        lat_noises.append(
+            torch.tensor([(ol - tl[0]) if ol is not None else 0.0 for ol, tl in zip(rs.observed_lat.values(), rs.true_lat.values())],
+                         dtype=torch.float, device='cuda'))
+
+    long_noises = torch.stack(long_noises)
+    lat_noises = torch.stack(lat_noises)
+    det_ind = torch.stack(det_ind)
+    return det_ind, long_noises, lat_noises
 
 def dets_and_noise_from_stats(prediction_stats: Dict[int, RecedingHorizonStats]) -> Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor]:
