@@ -4,6 +4,7 @@ import copy
 import json
 import os
 from datetime import datetime
+from os.path import join
 
 import numpy as np
 from commonroad.common.file_reader import CommonRoadFileReader
@@ -26,7 +27,7 @@ from utils import mpc_result_to_dyn_obj, RecHorStat, EnhancedJSONEncoder
 import torch
 
 
-def run(num_sims: int, exp_name: str):
+def run(num_sims: int, exp_name: str, save_root: str):
     print(f"Num Sims: {num_sims}, Exp Name: {exp_name}")
 
     file_path = "scenarios/Complex.xml"
@@ -88,7 +89,7 @@ def run(num_sims: int, exp_name: str):
     with open("config/interstate_rule_config.json", 'r') as f:
         irc = InterstateRulesConfig(**json.load(f))
 
-    results_folder = f"results/{exp_name}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_N{num_sims}"
+    results_folder = join(save_root, f"results/{exp_name}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_N{num_sims}")
     os.makedirs(results_folder, exist_ok=True)
     ego_car = DynamicObstacle(100, ObstacleType.CAR,
                               Rectangle(width=task_config.car_width, length=task_config.car_length), start_state, None)
@@ -108,7 +109,7 @@ def run(num_sims: int, exp_name: str):
 
         # Note this conversion function for using alongside robustness calculation
         solution_state_dict = [solution_scenario.obstacle_states_at_time_step(i) for i in range(len(ego_states))]
-        fw = CommonRoadFileWriter(scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
+        fw = CommonRoadFileWriter(solution_scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
         fw.write_to_file(os.path.join(results_folder, f"solution-{n}.xml"), OverwriteExistingFile.ALWAYS)
         with open(os.path.join(results_folder, f"noise_estimates-{n}.json"), 'w') as f:
             json.dump(obs_ests, f, cls=EnhancedJSONEncoder)
@@ -133,5 +134,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("N", help="Number of Simulations to Run", type=int)
     parser.add_argument("exp_name", help="Name of Experiment Run", type=str)
+    parser.add_argument("save_root", help="Root folder to save results in", type=str)
     args = parser.parse_args()
-    run(args.N, args.exp_name)
+    run(args.N, args.exp_name, args.save_root)
