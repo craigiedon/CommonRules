@@ -195,7 +195,7 @@ def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_long
 
     start_time = time.time()
     # print(cp.installed_solvers())
-    prob_config.prob.solve(solver="GUROBI")
+    prob_config.prob.solve(solver="GUROBI", verbose=True)
     # print("Solve Time: ", time.time() - start_time)
     # print(prob_config.prob.solution.status)
 
