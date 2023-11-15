@@ -9,3 +9,5 @@ casadi~=3.6.3
 filterpy~=1.4.5
 seaborn~=0.12.2
 scikit-learn~=1.3.0
+commonroad-io
+pyro-ppl
