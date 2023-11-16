@@ -1,9 +1,11 @@
 import copy
 import json
+import argparse
 import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from os.path import join
 
 import torch
 import random
@@ -21,6 +23,7 @@ from commonroad.scenario.state import InitialState
 from CarMPC import kalman_receding_horizon, pem_observation_batch, initialize_rec_hor_stat
 from PyroGPClassification import load_gp_classifier
 from PyroGPRegression import load_gp_reg
+from ScenarioImportanceSampling import convert_PEM_traj, dets_and_noise_from_stats_new
 from TaskConfig import TaskConfig, CostWeights
 from anim_utils import animate_with_predictions
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
@@ -44,6 +47,17 @@ def level_partition(xs: np.ndarray, level: float) -> Tuple[np.ndarray, np.ndarra
     saved_idxs, discard_idxs = idxs[val_mask], idxs[~val_mask]
     assert len(saved_idxs) + len(discard_idxs) == len(idxs)
     return saved_idxs, discard_idxs
+
+def level_partition_strict(xs: np.ndarray, K: int) -> Tuple[np.ndarray, np.ndarray]:
+    sort_id_vs = sorted(enumerate(xs), key=lambda kv: kv[1], reverse=True)
+    sort_ids = np.array([i for i, x in sort_id_vs])
+    discard_idxs, saved_idxs = sort_ids[:K], sort_ids[K:]
+
+    assert len(discard_idxs) == K
+    assert len(saved_idxs) == len(xs) - K
+
+    return saved_idxs, discard_idxs
+
 
 
 @dataclass(frozen=True)
@@ -96,6 +110,7 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sim_T: i
         if len(saved_idxs) == 0:
             print(f"Extinction at level: {current_level}")
             break
+        # saved_idxs, discard_idxs = level_partition_strict(final_rob_vals, num_discard)
         stage_discards.append(len(discard_idxs))
         print(f"Current Level: {current_level}, Final Level: {final_level}, Discards: {len(discard_idxs)}")
 
@@ -110,6 +125,7 @@ def adaptive_multi_split(start_state, sim_func: Callable, spec: STLExp, sim_T: i
             cloned_maps = copy.deepcopy(stage_wl_maps_hist[clone_idx])
 
             level_entry = first_pred(cloned_maps, lambda x: x[spec].vs[0] < current_level)
+            # level_entry = first_pred(cloned_maps, lambda x: x[spec].vs[0] <= current_level) # Note - this is for the fixed discards regime to work
 
             # current_resample_traj = cloned_traj[level_entry]
             # current_wl_map = cloned_maps[level_entry]
@@ -163,7 +179,7 @@ def simple_sim(start_state: int, T: int) -> List[int]:
     return traj
 
 
-def kal_run():
+def kal_run(sims_per_stage: int, discard_prop: float, rule_name: str, exp_name: str, save_root: str):
     file_path = "scenarios/Complex.xml"
     scenario, planning_problem_set = CommonRoadFileReader(file_path).open()
 
@@ -200,8 +216,8 @@ def kal_run():
         cws = CostWeights(**json.load(f))
 
     sim_T = 40
-    sample_size = 1000
-    num_discard = int(np.ceil(0.1 * sample_size))
+    # sample_size = 1000
+    # num_discard = int(np.ceil(0.1 * sample_size))
     final_level = 0
 
     # start_state = InitialState(position=np.array([0.0 + task_config.car_length / 2.0, ego_lane_centres[0]]),
@@ -225,53 +241,62 @@ def kal_run():
         raise ValueError(f"Max Retries {max_retries} attempted and failed!")
 
     sim_func = try_kalman_rh
+    num_discard = int(discard_prop * sims_per_stage)
 
     with open("config/interstate_rule_config.json", 'r') as f:
         irc = InterstateRulesConfig(**json.load(f))
 
-    results_folder = f"results/AMS-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_N{sample_size}_K{num_discard}_L{final_level}"
+    results_folder = join(save_root,
+                          f"results/{exp_name}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_N{sims_per_stage}_K{num_discard}_L{final_level}")
     ego_car = DynamicObstacle(100, ObstacleType.CAR,
                               Rectangle(width=task_config.car_width, length=task_config.car_length), start_state, None)
 
     rules = gen_interstate_rules(ego_car, scenario.dynamic_obstacles, all_lane_centres, lane_widths, ego_lane_centres,
                                  all_lane_centres[0:1], irc)
-    for rule_name, spec in rules.items():
-        print("Rule: ", rule_name)
 
-        raw_mc_fail_prob = raw_MC_prob(sim_func, start_state, spec, sim_T, sample_size, final_level, scenario, task_config)
-        final_stage_trajs, ams_results = adaptive_multi_split(start_state, sim_func, spec, sim_T, sample_size,
-                                                              num_discard,
-                                                              final_level)
-        print("Failure Probability:", ams_results.failure_prob)
+    spec = rules[rule_name]
 
-        rule_folder = os.path.join(results_folder, rule_name)
-        scenarios_folder = os.path.join(rule_folder, "final_scenarios")
-        stats_folder = os.path.join(rule_folder, "stats")
-        os.makedirs(rule_folder, exist_ok=True)
-        os.makedirs(scenarios_folder, exist_ok=True)
-        os.makedirs(stats_folder, exist_ok=True)
+    print("Rule: ", rule_name)
 
-        np.savetxt(os.path.join(stats_folder, "levels.txt"), ams_results.level_vals)
-        np.savetxt(os.path.join(stats_folder, "discards.txt"), ams_results.discards_per_level)
-        np.savetxt(os.path.join(stats_folder, "rob_vals.txt"), ams_results.rob_vals_per_level)
-        np.savetxt(os.path.join(stats_folder, "failure_prob.txt"), [ams_results.failure_prob])
+    final_stage_trajs, ams_results = adaptive_multi_split(start_state, sim_func, spec, sim_T, sims_per_stage,
+                                                          num_discard, final_level)
+    print("Failure Probability:", ams_results.failure_prob)
 
-        # Populate scenarios using results
-        for i, (traj, pred_stat) in enumerate(final_stage_trajs):
-            solution_scenario = copy.deepcopy(scenario)
-            ego_soln_obj = mpc_result_to_dyn_obj(100, traj, task_config.car_width, task_config.car_length)
-            solution_scenario.add_objects(ego_soln_obj)
+    rule_folder = os.path.join(results_folder, rule_name)
+    scenarios_folder = os.path.join(rule_folder, "final_scenarios")
+    stats_folder = os.path.join(rule_folder, "stats")
+    os.makedirs(rule_folder, exist_ok=True)
+    os.makedirs(scenarios_folder, exist_ok=True)
+    os.makedirs(stats_folder, exist_ok=True)
 
-            scenario_save_path = os.path.join(scenarios_folder, f"soln_{i}.xml")
-            pred_save_path = os.path.join(scenarios_folder, f"predStats_{i}.json")
+    np.savetxt(os.path.join(stats_folder, "levels.txt"), ams_results.level_vals)
+    np.savetxt(os.path.join(stats_folder, "discards.txt"), ams_results.discards_per_level)
+    np.savetxt(os.path.join(stats_folder, "rob_vals.txt"), ams_results.rob_vals_per_level)
+    np.savetxt(os.path.join(stats_folder, "failure_prob.txt"), [ams_results.failure_prob])
 
-            fw = CommonRoadFileWriter(solution_scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
-            fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
 
-            with open(pred_save_path, 'w') as f:
-                json.dump(pred_stat, f, cls=EnhancedJSONEncoder)
+    for i, (traj, pred_stat) in enumerate(final_stage_trajs):
+        solution_scenario = copy.deepcopy(scenario)
+        ego_soln_obj = mpc_result_to_dyn_obj(100, traj, task_config.car_width, task_config.car_length)
+        solution_scenario.add_objects(ego_soln_obj)
 
-    animate_with_predictions(solution_scenario, pred_stat, sim_T, show=True)
+        scenario_save_path = os.path.join(scenarios_folder, f"soln_{i}.xml")
+        pred_save_path = os.path.join(scenarios_folder, f"predStats_{i}.json")
+
+        fw = CommonRoadFileWriter(solution_scenario, planning_problem_set, "Craig Innes", "University of Edinburgh")
+        fw.write_to_file(scenario_save_path, OverwriteExistingFile.ALWAYS)
+
+        with open(pred_save_path, 'w') as f:
+            json.dump(pred_stat, f, cls=EnhancedJSONEncoder)
+
+        pem_states = convert_PEM_traj(sim_T, 100, solution_scenario, norm_mus, norm_stds)[1:]
+        pem_dets, pem_long_noises, pem_lat_noises = dets_and_noise_from_stats_new(pred_stat)
+        torch.save(pem_states, os.path.join(scenarios_folder, f"pem_states-{i}.pt"))
+        torch.save(pem_dets, os.path.join(scenarios_folder, f"pem_dets-{i}.pt"))
+        torch.save(pem_long_noises, os.path.join(scenarios_folder, f"pem_long_noise-{i}.pt"))
+        torch.save(pem_lat_noises, os.path.join(scenarios_folder, f"pem_lat_noise-{i}.pt"))
+
+    # animate_with_predictions(solution_scenario, pred_stat, sim_T, show=True)
 
 
 def toy_run():
@@ -303,7 +328,8 @@ def toy_run():
     print("Raw MC Prob:", len(failing_vals) / N)
 
 
-def raw_MC_prob(sim_func: Callable, start_state, spec: STLExp, sim_T: int, N: int, final_level: float, scenario: Scenario, task_config) -> float:
+def raw_MC_prob(sim_func: Callable, start_state, spec: STLExp, sim_T: int, N: int, final_level: float,
+                scenario: Scenario, task_config) -> float:
     # Raw monte carlo version
     # trajectories = []
     ssds = []
@@ -329,5 +355,11 @@ def raw_MC_prob(sim_func: Callable, start_state, spec: STLExp, sim_T: int, N: in
 
 
 if __name__ == "__main__":
-    kal_run()
-    # toy_run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("N", help="Number of Sims Per Split Level", type=int)
+    parser.add_argument("discard_prop", help="proportion to discard each stage (range 0-1)", type=float)
+    parser.add_argument("rule_name", help="Name of rule to split against", type=str)
+    parser.add_argument("exp_name", help="Name of Experiment Run", type=str)
+    parser.add_argument("save_root", help="Root folder to save results in", type=str)
+    args = parser.parse_args()
+    kal_run(args.N, args.discard_prop, args.rule_name, args.exp_name, args.save_root)
