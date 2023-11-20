@@ -323,6 +323,7 @@ def ce_score_batch_stable(ep_pem_states, ep_pred_stats, det_pem, reg_pem, imp_sa
 class CEStepRes:
     thresh: float
     failure_est: float
+    log_fail_est: float
 
 
 def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: List[torch.Tensor],
@@ -346,8 +347,11 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
     indicator_flag = (rep_rob_vals <= ce_thresh).cuda().detach()
     final_indicator = (rep_rob_vals <= 0).cuda().detach()
 
+    log_fail_est = torch.logsumexp(ll_ratios[final_indicator]) - np.log(len(ll_ratios))
     fail_est = torch.sum(ll_ratios.exp() * final_indicator).item() / len(ll_ratios)
     print(f"Min/Max: {sorted_rvs[0]}, {sorted_rvs[-1]}")
+
+    print(f"Log Failure Prob Estimat: {log_fail_est}")
     print(f"Failure Prob Estimate: {fail_est}")
     print(f"Level Thesh: {ce_thresh}")
 
@@ -362,7 +366,7 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
              in
              zip(ep_pem_states, ep_det_inds, ep_long_noises, ep_lat_noises)])
 
-        cross_ents = -(ll_ratios * 0.1).exp() * imp_sampler_lps
+        cross_ents = -(ll_ratios).exp() * imp_sampler_lps
         # cross_ents = -imp_sampler_lps
         ce_loss = (indicator_flag * cross_ents).sum() / len(ep_pem_states)
 
@@ -375,7 +379,7 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
         ce_losses.append(ce_loss.item())
 
     # print("Done with all that then")
-    return CEStepRes(ce_thresh, fail_est)
+    return CEStepRes(ce_thresh, fail_est, log_fail_est)
 
     # plt.plot(ce_losses)
     # plt.show()
@@ -461,7 +465,7 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
     # log_prob = log_probs_scenario_traj(pem_states, loaded_stats, det_pem, reg_pem)
     # print(log_prob)
 
-    # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.5, 5.0)
+    # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.5, 1.0)
     # Save importance sampler weights
     # torch.save(imp_sampler.state_dict(), "models/imp_toy_0.5.pyt")
 
@@ -518,6 +522,7 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
 
     levels = []
     fail_probs = []
+    log_fail_probs = []
 
     for stage in range(stages_CE):
         ep_pem_states = []
@@ -605,10 +610,12 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
 
         levels.append(ce_step_res.thresh)
         fail_probs.append(ce_step_res.failure_est)
+        log_fail_probs.append(ce_step_res.log_fail_est)
         np.savetxt(join(stage_folder, "failure_prob.txt"), fail_probs)
 
     np.savetxt(join(results_folder_path, "levels.txt"), levels)
     np.savetxt(join(results_folder_path, "failure_prob.txt"), fail_probs)
+    np.savetxt(join(results_folder_path, "log_failure_prob.txt"), log_fail_probs)
 
     # plt.plot(lp_means)
     # plt.title("Original Log Probabilities")
