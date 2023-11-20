@@ -18,6 +18,7 @@ from commonroad.geometry.shape import Rectangle
 from commonroad.scenario.obstacle import Obstacle, DynamicObstacle, ObstacleType
 from commonroad.scenario.state import CustomState, InitialState
 from matplotlib import pyplot as plt
+from scipy.special import logsumexp
 from scipy.stats import norm
 import torch
 import torch.nn.functional as F
@@ -347,7 +348,11 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
     indicator_flag = (rep_rob_vals <= ce_thresh).cuda().detach()
     final_indicator = (rep_rob_vals <= 0).cuda().detach()
 
-    log_fail_est = torch.logsumexp(ll_ratios[final_indicator]) - np.log(len(ll_ratios))
+    if len(ll_ratios[final_indicator] > 0):
+        log_fail_est = logsumexp(ll_ratios[final_indicator].cpu().numpy()) - np.log(len(ll_ratios))
+    else:
+        log_fail_est = np.log(0.0)
+
     fail_est = torch.sum(ll_ratios.exp() * final_indicator).item() / len(ll_ratios)
     print(f"Min/Max: {sorted_rvs[0]}, {sorted_rvs[-1]}")
 
@@ -366,7 +371,7 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
              in
              zip(ep_pem_states, ep_det_inds, ep_long_noises, ep_lat_noises)])
 
-        cross_ents = -(ll_ratios).exp() * imp_sampler_lps
+        cross_ents = -(ll_ratios * 0.1).exp() * imp_sampler_lps
         # cross_ents = -imp_sampler_lps
         ce_loss = (indicator_flag * cross_ents).sum() / len(ep_pem_states)
 
