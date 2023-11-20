@@ -182,7 +182,7 @@ def create_cvx_mpc(T: int, tc: TaskConfig, obstacles: List[Obstacle]) -> CVXInte
     return CVXInterstateProblem(prob, start_params, obs_xs, obs_ys, obs_v_x, x, y, vx, vy, ax, ay)
 
 
-def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_longs, pred_lats) -> Optional[
+def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_longs, pred_lats, verbose: bool = False) -> Optional[
     PointMPCResult]:
     prob_config.start_params.value = [start_state.position[0],
                                       start_state.position[1],
@@ -195,17 +195,22 @@ def cvx_mpc(prob_config: CVXInterstateProblem, start_state, obstacles, pred_long
 
     start_time = time.time()
     # print(cp.installed_solvers())
-    prob_config.prob.solve(solver="GUROBI")
+    prob_config.prob.solve(solver="GUROBI", verbose=verbose)
     # print("Solve Time: ", time.time() - start_time)
     # print(prob_config.prob.solution.status)
 
-    if prob_config.prob.solution.status == cp.OPTIMAL:
-        return PointMPCResult(xs=np.array(prob_config.xs.value), ys=np.array(prob_config.ys.value),
-                              vs_x=np.array(prob_config.vs_x.value),
-                              vs_y=np.array(prob_config.vs_y.value),
-                              as_x=np.array(prob_config.as_x.value), as_y=np.array(prob_config.as_y.value))
+    try:
+        if prob_config.prob.solution.status == cp.OPTIMAL:
+            return PointMPCResult(xs=np.array(prob_config.xs.value), ys=np.array(prob_config.ys.value),
+                                  vs_x=np.array(prob_config.vs_x.value),
+                                  vs_y=np.array(prob_config.vs_y.value),
+                                  as_x=np.array(prob_config.as_x.value), as_y=np.array(prob_config.as_y.value))
 
-    return None
+        return None
+    except Exception as e:
+        print("Failed at the CVX Stage (With an exception? I thought I was supposed to catch these!")
+        return None
+
 
 
 def run():

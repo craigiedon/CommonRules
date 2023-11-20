@@ -622,8 +622,18 @@ def kalman_receding_horizon(start_step: int, sim_steps: int, prediction_steps: i
 
     for i in range(1, sim_steps):
         t = start_step + i
-        cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, traj_ob_model_data[-1].prediction_traj_long,
-                           traj_ob_model_data[-1].prediction_traj_lat)
+        try:
+            cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, traj_ob_model_data[-1].prediction_traj_long,
+                               traj_ob_model_data[-1].prediction_traj_lat)
+        except Exception as e:
+            print(f"Got an exception at the CVX Level: {e}")
+            cvx_warm = None
+            # print("Re-trying with VERBOSE to locate error...")
+            # cvx_warm = cvx_mpc(cvx_prob_config, current_state, scenario.obstacles, traj_ob_model_data[-1].prediction_traj_long,
+            #                    traj_ob_model_data[-1].prediction_traj_lat, True)
+
+
+
         if cvx_warm is not None:
             warm_start = point_to_kin_res(cvx_warm)
         else:
