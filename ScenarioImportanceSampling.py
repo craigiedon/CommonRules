@@ -48,6 +48,9 @@ class SimpleImportanceSampler(nn.Module):
             nn.ReLU(),
             nn.Linear(h_dims, h_dims),
             # nn.Dropout(),
+            # nn.ReLU(),
+            # nn.Linear(h_dims, h_dims),
+
             nn.ReLU(),
             nn.Linear(h_dims, 5)
         )
@@ -250,7 +253,7 @@ def pre_trained_imp_sampler(in_dims: int, target_det_prob: float, target_varianc
     N_toy = 10000
     toy_ins = torch.normal(torch.zeros(N_toy, in_dims), torch.ones(N_toy, in_dims))
     toy_labels = torch.tile(
-        torch.tensor([torch.logit(torch.tensor(target_det_prob), eps=1e-6).item(), 0.0, np.log(target_variance), 0.0,
+        torch.tensor([target_det_prob, 0.0, np.log(target_variance), 0.0,
                       np.log(target_variance)],
                      dtype=torch.float),
         (N_toy, 1))
@@ -259,14 +262,14 @@ def pre_trained_imp_sampler(in_dims: int, target_det_prob: float, target_varianc
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(imp_sampler.parameters())
 
-    epochs = 300
+    epochs = 500
     imp_sampler.train()
     avg_losses = []
     for e in range(epochs):
         losses = []
         for toy_X, toy_label in toy_loader:
             imp_pred = imp_sampler(toy_X)
-            loss = loss_fn(imp_pred, toy_label)
+            loss = loss_fn(torch.column_stack([torch.sigmoid(imp_pred[:, 0]), imp_pred[:, 1:]]), toy_label)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -290,6 +293,68 @@ def pre_trained_imp_sampler(in_dims: int, target_det_prob: float, target_varianc
     # eval_imp = imp_sampler(line_tests)
     # plt.plot(line_tests.cpu().detach()[:, 1], eval_imp.cpu().detach()[:, 1:])
     # plt.show()
+
+def pre_train_imp_from_pem(in_dims:int, det_pem, reg_pem) -> nn.Module:
+    imp_sampler = SimpleImportanceSampler(in_dims, 100).cuda()
+
+    N_toy = 10000
+    with torch.no_grad():
+        toy_ins = torch.normal(torch.zeros(N_toy, in_dims), torch.ones(N_toy, in_dims)).cuda()
+        toy_labels_det = det_pem(toy_ins)[0]
+        toy_labels_reg_locs, toy_labels_reg_vars = reg_pem(toy_ins)
+        toy_labels = torch.column_stack([toy_labels_det, toy_labels_reg_locs[0], toy_labels_reg_vars[0], toy_labels_reg_locs[1], toy_labels_reg_vars[1]])
+
+    toy_dataset = TensorDataset(toy_ins.cuda(), toy_labels.cuda())
+    toy_loader = DataLoader(toy_dataset, 1024, shuffle=True)
+
+    loss_fn = nn.MSELoss()
+    det_loss_fn = nn.MSELoss()
+    reg_loss_fn = nn.MSELoss()
+    # reg_loss_fn = nn.GaussianNLLLoss()
+
+
+    optimizer = torch.optim.Adam(imp_sampler.parameters())
+
+    epochs = 500
+    imp_sampler.train()
+    avg_losses = []
+    for e in range(epochs):
+        losses = []
+        for toy_X, toy_label in toy_loader:
+            imp_pred = imp_sampler(toy_X)
+
+            converted_imp_pred = torch.column_stack([torch.sigmoid(imp_pred[:, 0]), imp_pred[:, 1], torch.exp(imp_pred[:, 2]), imp_pred[:, 3], torch.exp(imp_pred[:, 4])])
+            converted_label = torch.column_stack([torch.sigmoid(toy_label[:, 0]), toy_label[:, 1:]])
+
+
+            # imp_pred_det_sig = torch.sigmoid(imp_pred[:, 0])
+            # label_det_sig = torch.sigmoid(toy_label[:, 0])
+            #
+            # imp_pred_reg_loc_long = imp_pred[:, 1]
+            # label_reg_loc_long = toy_label[:, 1]
+            #
+            # imp_pred_reg_var_long = imp_pred[:, 2]
+            # label_reg_var_long = toy_label[:, 2]
+            # d_loss = det_loss_fn(torch.sigmoid(imp_pred[:, 0]), torch.sigmoid(toy_label[:, 0]))
+            # r_loss = reg_loss_fn(imp_pred_reg_loc_long, label_reg_loc_long)
+
+            loss = loss_fn(converted_imp_pred, converted_label)
+
+            # loss = d_loss + r_loss
+            # F.gaussian_nll_loss()
+            # r_loss = reg_loss_fn(imp_pred, toy_label, toy_var)
+            # loss = loss_fn(imp_pred, toy_label)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            losses.append(loss.item())
+        avg_loss = np.mean(losses)
+        if e % 50 == 0:
+            print(f"Epoch {e}: ", avg_loss)
+        avg_losses.append(avg_loss)
+
+    return imp_sampler
+
 
 
 def rho_quantile(vals: Sequence[Any], rho: float, min_val: float) -> float:
@@ -334,7 +399,7 @@ def ce_one_step(ep_pem_states, ep_det_inds: List[torch.tensor], ep_long_noises: 
     sorted_rvs = sorted(rep_rob_vals, reverse=True)
     ce_thresh = rho_quantile(sorted_rvs, 0.1, 0.0)
     ce_opt = torch.optim.Adam(imp_sampler.parameters())
-    ce_solver_its = 1000
+    ce_solver_its = 300
 
     ce_losses = []
     orig_pem_lps = torch.stack(
@@ -470,13 +535,14 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
     # log_prob = log_probs_scenario_traj(pem_states, loaded_stats, det_pem, reg_pem)
     # print(log_prob)
 
-    # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.5, 1.0)
+    # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.1, 2.0)
+    # imp_sampler = pre_train_imp_from_pem(norm_mus.shape[0], det_pem, reg_pem)
     # Save importance sampler weights
-    # torch.save(imp_sampler.state_dict(), "models/imp_toy_0.5.pyt")
+    # torch.save(imp_sampler.state_dict(), "models/imp_pem_copy.pyt")
 
     # Load importance sampler weights
     imp_sampler = SimpleImportanceSampler(8, 100).cuda()
-    imp_sampler.load_state_dict(torch.load("models/imp_toy_0.5.pyt"))
+    imp_sampler.load_state_dict(torch.load("models/imp_pem_copy.pyt"))
 
     # Create an observation function for the importance sampler
 
