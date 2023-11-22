@@ -312,7 +312,6 @@ def pre_train_imp_from_pem(in_dims:int, det_pem, reg_pem) -> nn.Module:
     reg_loss_fn = nn.MSELoss()
     # reg_loss_fn = nn.GaussianNLLLoss()
 
-
     optimizer = torch.optim.Adam(imp_sampler.parameters())
 
     epochs = 500
