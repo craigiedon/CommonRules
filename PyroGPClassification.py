@@ -8,6 +8,7 @@ import numpy as np
 import pyro
 import pyro.contrib.gp as gp
 import pyro.distributions as dist
+from matplotlib import rcParams
 
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -104,6 +105,8 @@ def load_gp_classifier(folder_path: str, cuda=False) -> gp.models.VariationalSpa
 
 
 def run():
+    rcParams["pdf.fonttype"] = 42
+    rcParams["ps.fonttype"] = 42
     norm_mus = torch.load("data/nuscenes/inp_mus.pt")
     norm_stds = torch.load("data/nuscenes/inp_stds.pt")
 
@@ -128,46 +131,47 @@ def run():
     Xu = train_data.tensors[0][::250]
     # Xu = torch.rand((590, 8))
 
-    vsgp = gp.models.VariationalSparseGP(train_data.tensors[0][:subset],
-                                         train_data.tensors[1][:subset, 0],
-                                         kernel,
-                                         Xu=Xu,
-                                         likelihood=likelihood,
-                                         # whiten=True,
-                                         jitter=1e-05).cuda()
-
-    elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=1000,
-                                       optimizer=torch.optim.AdamW(vsgp.parameters(), lr=0.1),
-                                       scheduler_step=200)
-
-    plot_loss(elbo_losses)
-    plt.show()
-
-    plot_loss(val_losses)
-    plt.show()
+    # vsgp = gp.models.VariationalSparseGP(train_data.tensors[0][:subset],
+    #                                      train_data.tensors[1][:subset, 0],
+    #                                      kernel,
+    #                                      Xu=Xu,
+    #                                      likelihood=likelihood,
+    #                                      # whiten=True,
+    #                                      jitter=1e-05).cuda()
+    #
+    # elbo_losses, val_losses = train_gp(vsgp, val_data, num_steps=1000,
+    #                                    optimizer=torch.optim.AdamW(vsgp.parameters(), lr=0.1),
+    #                                    scheduler_step=200)
+    #
+    # plot_loss(elbo_losses)
+    # plt.show()
+    #
+    # plot_loss(val_losses)
+    # plt.show()
 
     # torch.save(vsgp.state_dict(), f"models/nuscenes/vsgp_class_i{len(Xu)}.pt")
     # vsgp.load_state_dict(torch.load(f"models/nuscenes/vsgp_class_i{len(Xu)}.pt"))
 
-    save_sparse_gp(f"models/nuscenes/vsgp_class", vsgp)
+    # save_sparse_gp(f"models/nuscenes/vsgp_class", vsgp)
 
     vsgp = load_gp_classifier(f"models/nuscenes/vsgp_class", True)
 
     gp_v_preds, gp_v_vars = vsgp(val_data.tensors[0], full_cov=False)
-    plot_roc(val_data.tensors[1][:, 0].cpu().detach(), torch.sigmoid(gp_v_preds.cpu().detach()), "GP")
-    plt.show()
+    # plot_roc(val_data.tensors[1][:, 0].cpu().detach(), torch.sigmoid(gp_v_preds.cpu().detach()), "GP")
+    # plt.show()
 
     # plot(model=vgsp, plot_observed_data=True, plot_predictions=True)
     # plt.show()
 
-    num_x, num_y = 100, 100
-    viz_range = 110
+    num_x, num_y = 50, 50
+    viz_range = 70
     ps = torch.stack(
         torch.meshgrid([torch.linspace(-viz_range, viz_range, num_x), torch.linspace(-viz_range, viz_range, num_y)]),
         dim=2).reshape(-1, 2)
-    for o in range(4):
-        plt.subplot(2, 2, o + 1)
-        plt.title(f"Viz: {o + 1}")
+    for o in [3]:
+    # for o in range(4):
+        # plt.subplot(2, 2, o + 1)
+        # plt.title(f"Viz: {o + 1}")
 
         ev_rot = torch.full((len(ps),), np.pi / 2.0)
         ev_dims = torch.tensor([4.6, 1.9, 1.7]).repeat(len(ps), 1)
@@ -182,7 +186,9 @@ def run():
 
         p_grid = ps.reshape(num_x, num_y, 2)
 
-        plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_preds.cpu().detach(), vmin=0.0, vmax=1.0)
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.pcolormesh(p_grid[:, :, 0], p_grid[:, :, 1], z_preds.cpu().detach(), vmin=0.0, vmax=0.85)
         plt.colorbar()
 
     plt.show()

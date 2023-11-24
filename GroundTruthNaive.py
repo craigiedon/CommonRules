@@ -20,6 +20,7 @@ from PyroGPRegression import load_gp_reg
 from ScenarioImportanceSampling import convert_PEM_traj, dets_and_noise_from_stats, dets_and_noise_from_stats_new
 from TaskConfig import TaskConfig, CostWeights
 from adaptiveMultilevelSplit import raw_MC_prob
+from anim_utils import animate_with_predictions, single_show
 from immFilter import c_vel_long_model, c_acc_long_model, lat_model
 from monitorScenario import InterstateRulesConfig, gen_interstate_rules
 from stl import stl_rob
@@ -122,6 +123,9 @@ def run(num_sims: int, exp_name: str, save_root: str):
         torch.save(pem_lat_noises, os.path.join(results_folder, f"pem_lat_noise-{n}.pt"))
 
         ssds.append(solution_state_dict)
+
+        # animate_with_predictions(solution_scenario, obs_ests, 40, show=True)
+        single_show(solution_scenario, obs_ests, 20, show=True)
 
     for rule_name, spec in rules.items():
         rob_vals = np.array([stl_rob(spec, ssd, 0) for ssd in ssds])

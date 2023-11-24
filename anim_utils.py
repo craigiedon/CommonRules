@@ -53,6 +53,23 @@ def animate_with_predictions(scenario, prediction_stats, timesteps: int, show=Tr
         plt.show()
 
 
+def single_show(scenario, prediction_stats, timestep: int, show=True):
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
+    fig, ax = plt.subplots(figsize=((25, 3)))
+    rnd = MPRenderer(ax=ax)
+    rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
+    rnd.draw_params.dynamic_obstacle.show_label = True
+    ax.set_xlim(0, 150)
+    ax.set_ylim(-5, 5)
+
+    animate_kalman_predictions(timestep, ax, rnd, scenario, prediction_stats, False, True)
+
+    plt.tight_layout()
+    if show:
+        plt.show()
+
+
 def animate_scenario(scenario: Scenario, timesteps: int, ego_v: Optional[DynamicObstacle] = None,
                      save_path=None, show=False, figax=None):
     if figax is None:
@@ -177,17 +194,18 @@ def animate_kalman_predictions(i, ax, rnd: MPRenderer, scenario: Scenario,
                                plot_tru_pos: bool = False,
                                plot_obs_pos: bool = False):
     rnd.draw_params.time_begin = i
-    rnd.draw_params.time_end = i + 15
+    rnd.draw_params.time_end = i
     scenario.draw(rnd)
     rnd.render()
 
     ob_ids = list(p_stats[0].true_long.keys())
     for o_id in ob_ids:
-        x_longs = np.array([ps.true_long[o_id] for ps in p_stats[:i]]) #np.array(ps.true_longs)
-        x_lats = np.array([ps.true_lat[o_id] for ps in p_stats[:i]]) #np.array(ps.true_lats)
-        z_longs = [ps.observed_long[o_id] for ps in p_stats[:i] if ps.observed_long is not None] #np.array(ps.observed_longs)
-        z_lats = [ps.observed_lat[o_id] for ps in p_stats[:i] if ps.observed_lat is not None] #np.array(ps.observed_lats)
-
+        x_longs = np.array([ps.true_long[o_id] for ps in p_stats[:i]])  # np.array(ps.true_longs)
+        x_lats = np.array([ps.true_lat[o_id] for ps in p_stats[:i]])  # np.array(ps.true_lats)
+        z_longs = [ps.observed_long[o_id] for ps in p_stats[:i] if
+                   ps.observed_long is not None]  # np.array(ps.observed_longs)
+        z_lats = [ps.observed_lat[o_id] for ps in p_stats[:i] if
+                  ps.observed_lat is not None]  # np.array(ps.observed_lats)
 
         if plot_tru_pos:
             ax.plot(x_longs[:, 0], x_lats[:, 0], zorder=100)

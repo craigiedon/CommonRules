@@ -10,10 +10,40 @@ from matplotlib import pyplot as plt
 from scipy.special import logsumexp
 
 
+def tufte_plot(value_map, x_label, y_label, ax_title):
+    fig, ax = plt.subplots()
+    all_vals = np.array(list(value_map.values()))
+    min_val = np.amin(all_vals[np.isfinite(all_vals)])
+    max_val = np.amax(all_vals[np.isfinite(all_vals)])
+    v_range = max_val - min_val
+    ax.set_ylim([min_val - 0.1 * v_range, max_val + 0.1 * v_range])
+    for leg, vals in value_map.items():
+        converted_vals = np.nan_to_num(vals, neginf=min_val - 0.12 * v_range)
+        ax.plot(converted_vals, linestyle='-', zorder=1)
+        ax.scatter(range(len(vals)), converted_vals, label=leg, s=15, zorder=3)
+        ax.scatter(range(len(vals)), converted_vals, color='white', s=75, zorder=2)
+
+    ax.set_title(ax_title)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.legend()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_bounds([0, len(vals) - 1])
+    ax.spines['left'].set_bounds([min_val, max_val])
+    ax.tick_params(direction='in')
+    # plt.tight_layout()
+    plt.show()
+
+
 def run():
+    # plt.rcParams["font.family"] = 'serif'
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
+    # TODO: Add in the "true type" thing for plots
     rule_names = ["rg_1", "rg_2", "rg_4", "ri_2"]
     # Ks = [2, 12, 25, 125, 225]
-    results_root = "/media/craig/Extreme Pro/amsResults/ceRG"
+    results_root = "/media/craig/Extreme Pro/amsResults/cePemRG"
 
     rv_log_fail_probs = defaultdict(list)
     rv_levels = defaultdict(list)
@@ -37,29 +67,31 @@ def run():
                 stage_vs.append(-1)
         rv_stage_fails[rule] = stage_vs
 
-
-
-    print("Done")
-
     # Chart the average "levels" of each CE
-    for rule, levels in rv_levels.items():
-        avg_d_levels = np.mean(levels, axis=0)
-        plt.plot(avg_d_levels, label=rule)
-    plt.legend()
-    plt.show()
+    avg_level_map = {rule: np.mean(levels, axis=0) for rule, levels in rv_levels.items()}
+    # tufte_plot(avg_level_map, "Stage", "$\gamma_{k}$", "Robustness Threshold per Stage")
 
     # Chart the log failure probabilities as levels proceed
-    for rule, lfps in rv_log_fail_probs.items():
-        # avg_d_levels = np.mean(levels, axis=0)
-        avg_lfps = logsumexp(lfps, axis=0)
-        plt.plot(avg_lfps, label=rule)
-    plt.legend()
-    plt.show()
+    avg_fps_map = {rule: logsumexp(lfps, axis=0) - np.log(len(lfps)) for rule, lfps in rv_log_fail_probs.items()}
+    probs_map = {rule: np.exp(lfps) for rule, lfps in rv_log_fail_probs.items()}
+    # tufte_plot(avg_fps_map, "Stage", "Log Failure Probability", "Log Failure Probability Estimate per Stage")
 
-    for rule, stage_fails in rv_stage_fails.items():
-        plt.plot(stage_fails, label=rule)
-    plt.legend()
-    plt.show()
+    # Chart Number of Failures Per Stage
+    # tufte_plot(rv_stage_fails, "Stage", "Failures", "Number of True Failures Per Stage")
+
+    final_mu_map = {rule: np.mean(probs, axis=0)[-1] for rule, probs in probs_map.items()}
+    final_std_map = {rule: np.std(probs, axis=0)[-1] for rule, probs in probs_map.items()}
+    for rule, probs in probs_map.items():
+        print(len(probs))
+        print(f"Rule: {rule} Fail Prob: {final_mu_map[rule]:.2e} (+- {final_std_map[rule]:.2e})")
+
+    # For latex format
+    row_output = []
+    for rule in probs_map.keys():
+        mu, std = final_mu_map[rule], final_std_map[rule]
+        rv_string = f"${mu:.2e}$ $(\\pm {std:.2e})$".replace("e-", "\\text{e-}")
+        row_output.append(rv_string)
+    print(" & ".join(row_output), "\\\\")
 
     # Chart the...
 

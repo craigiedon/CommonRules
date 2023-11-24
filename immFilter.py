@@ -169,7 +169,7 @@ def run():
     for pt in pred_ts:
         pts = int(pt / lat_config.dt)
         prediction_at_t = t_state_pred(lat_mus[pts], lat_models, mps_lat[pts], N - pts)
-        axs.plot(ts * np.arange(pts, N), prediction_at_t[:, 0], color='purple', alpha=0.5)
+        axs.plot(ts * np.arange(pts, N + 1), prediction_at_t[:, 0], color='purple', alpha=0.5)
 
     # for fp_lat_trace in fpy_mus_lat:
     for single_model in lat_models:
