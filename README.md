@@ -1,26 +1,38 @@
-# Instructions for Running on the EDDIE Cluster
+# Adaptive Splitting of Reusable Temporal Monitors for Rare Traffic Violations
 
-### Creating a Conda Environment
+This is the accompanying code-base for the paper (NOTE: Paper available soon):
 
-Listing conda envs:
+[Adaptive Splitting of Reusable Temporal Monitors for Rare Traffic Violations](www.google.com)
 
-    conda env list
+## Setup
 
-Installing packages to a conda env from a pip requirements?
+### Installation Prerequisites
 
-    conda install pip
-    pip install
+To install required libraries, run:
+
+    pip install -r requirements.txt
+
+The MPC-controller for the Automated Vehicle uses [Gurobi](https://www.gurobi.com) for Non-Linear Program Solving, so you will need a [License](https://www.gurobi.com/academia/academic-program-and-licenses/).
 
 
-Theres some note about making sure pytorch is installed with the cuda versions
+Any extra steps when you go to run?
 
+TODO: Put on new env and attempt to run the ground truths
+TODO: Attempt to run AMS and CE. Any issues?
 
-Remember: Configuration options set here (including some stuff about caches...)
-https://www.wiki.ed.ac.uk/display/ResearchServices/Anaconda
+## Pre-requisites of Preparing the Data to train the surrogate
+## Training the Surrogate?
 
-    module load anaconda
-    module load cuda
-    conda activate ams-runner
+## Running Experiments
 
-Remember - you must allocate appropriate vmem too! (8G?)
+### ``Ground Truth'' Simulations
 
+### Importance Sampler Baselines
+
+### Adaptive Multilevel Splitting
+
+## Analysing Results
+
+### Visualizing a Run
+
+### Charting Results
