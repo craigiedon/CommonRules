@@ -518,9 +518,6 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
 
     T = 40
 
-    # with open(join(res_fp, f"prediction_stats_{0}.pkl"), 'rb') as f:
-    #     loaded_stats: Dict[int, RecedingHorizonStats] = pickle.load(f)
-
     # Load the PEMs here (with normed states)
     det_pem = load_gp_classifier("models/nuscenes/vsgp_class", True)
     det_pem.eval()
@@ -528,11 +525,6 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
     reg_pem.eval()
     norm_mus = torch.load("data/nuscenes/inp_mus.pt")
     norm_stds = torch.load("data/nuscenes/inp_stds.pt")
-
-    # Calculate the probability density function
-    # pem_states = convert_PEM_traj(T, 100, scenario, norm_mus, norm_stds)
-    # log_prob = log_probs_scenario_traj(pem_states, loaded_stats, det_pem, reg_pem)
-    # print(log_prob)
 
     # imp_sampler = pre_trained_imp_sampler(norm_mus.shape[0], 0.1, 2.0)
     # imp_sampler = pre_train_imp_from_pem(norm_mus.shape[0], det_pem, reg_pem)
@@ -703,7 +695,6 @@ def run(samples_per_stage: int, rule_name: str, exp_name: str, save_root: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("N", help="Number of Sims Per Adaptation Stage", type=int)
-    # parser.add_argument("ce_prop", help="Proportion of samples to guide cross-entropy learning (0-1)", type=float)
     parser.add_argument("rule_name", help="Name of rule to split against", type=str)
     parser.add_argument("exp_name", help="Name of Experiment Run", type=str)
     parser.add_argument("save_root", help="Root folder to save results in", type=str)

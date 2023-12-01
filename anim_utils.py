@@ -34,7 +34,7 @@ def animate_scenario_old(scenario: Scenario, planning_problem_set, timesteps: in
     plt.show()
 
 
-def animate_with_predictions(scenario, prediction_stats, timesteps: int, show=True):
+def animate_with_predictions(scenario, prediction_stats, timesteps: int, show=True, save=False):
     fig, ax = plt.subplots(figsize=(25, 3))
     rnd = MPRenderer(ax=ax)
     rnd.draw_params.dynamic_obstacle.trajectory.draw_continuous = True
@@ -43,7 +43,8 @@ def animate_with_predictions(scenario, prediction_stats, timesteps: int, show=Tr
     ani = FuncAnimation(fig, lambda i: animate_kalman_predictions(i, ax, rnd, scenario, prediction_stats, False, True),
                         frames=timesteps, interval=30, repeat=True, repeat_delay=200)
 
-    # ani.save("pem_anim.gif", animation.PillowWriter(fps=30))
+    if save:
+        ani.save("pem_anim.gif", animation.PillowWriter(fps=30))
 
     ax.set_xlim(0, 150)
     ax.set_ylim(-5, 5)

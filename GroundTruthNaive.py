@@ -124,7 +124,7 @@ def run(num_sims: int, exp_name: str, save_root: str):
 
         ssds.append(solution_state_dict)
 
-        # animate_with_predictions(solution_scenario, obs_ests, 40, show=True)
+        # animate_with_predictions(solution_scenario, obs_ests, 40, show=True, save=True)
         # single_show(solution_scenario, obs_ests, 20, show=True)
 
     for rule_name, spec in rules.items():
